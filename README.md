@@ -2,7 +2,7 @@
 
 **Offline AI-powered Windows Troubleshooting Assistant
 
-Tillnow phases 11 completed **
+Tillnow phases 11 completed**
 
 WinFix AI is a local, offline-first Windows troubleshooting assistant designed to help users diagnose, understand, repair, and verify common Windows computer problems safely.
 
