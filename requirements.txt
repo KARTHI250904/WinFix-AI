@@ -1,0 +1,4 @@
+streamlit
+ollama
+psutil
+pywin32
