@@ -1,6 +1,6 @@
 # WinFix AI
 
-## Offline AI-powered Windows Troubleshooting Assistant
+## Offline AI Agent for Windows Troubleshooting 
 
 Tillnow phases 11 completed
 
