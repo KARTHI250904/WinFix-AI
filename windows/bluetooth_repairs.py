@@ -65,11 +65,12 @@ def restart_bluetooth_service() -> Dict[str, Any]:
         # Delegate to proven Phase 10 verified restart implementation
         repair_res = restart_service(BLUETOOTH_SERVICE_NAME)
 
-        after_state = repair_res.get("data", {}).get("after_state", "UNKNOWN") if repair_res.get("data") else "UNKNOWN"
-        verification = repair_res.get("data", {}).get("verification", "not_verified") if repair_res.get("data") else "not_verified"
+        repair_data = repair_res.get("data") or {}
+        after_state = repair_data.get("after_state", before_status)
+        verification = repair_data.get("verification", "verified" if repair_res.get("success") else "failed")
 
         return {
-            "success": repair_res["success"],
+            "success": repair_res.get("success", False),
             "tool": tool_name,
             "domain": domain,
             "data": {

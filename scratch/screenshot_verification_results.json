@@ -1,0 +1,211 @@
+{
+  "timestamp": "2026-10-28 10:20:28",
+  "total_scenarios": 10,
+  "passed": 10,
+  "failed": 0,
+  "average_latency_ms": 7673,
+  "session_isolation": true,
+  "cross_mode_consistency": true,
+  "scenarios": [
+    {
+      "scenario": "S1_QUICK_SETTINGS_BT_OFF",
+      "name": "Windows Quick Settings (Bluetooth Off, Wi-Fi On)",
+      "status": "REAL_PASS",
+      "latency_ms": 362,
+      "vision_status": "VISION_SUCCESS",
+      "domain_pass": true,
+      "critical_pass": true,
+      "tool_allowlist_pass": true,
+      "plan_tools": [
+        "get_bluetooth_radio_status",
+        "get_bluetooth_diagnostics",
+        "get_bluetooth_service_status"
+      ],
+      "invalid_tools": [],
+      "tutor_title": "Bluetooth Disabled / Inactive \u2014 Step-by-Step Diagnostic & Solution Guide",
+      "tutor_step_count": 4,
+      "detected_error_codes": []
+    },
+    {
+      "scenario": "S2_QUICK_SETTINGS_WIFI_MISSING",
+      "name": "Windows Quick Settings (Wi-Fi Missing, Bluetooth On)",
+      "status": "REAL_PASS",
+      "latency_ms": 12265,
+      "vision_status": "VISION_SUCCESS",
+      "domain_pass": true,
+      "critical_pass": true,
+      "tool_allowlist_pass": true,
+      "plan_tools": [
+        "get_complete_system_info",
+        "check_dns_resolution",
+        "check_internet_connectivity",
+        "get_network_adapters_diagnostics"
+      ],
+      "invalid_tools": [],
+      "tutor_title": "Network & Wi-Fi Diagnostic \u2014 Step-by-Step Solution Guide",
+      "tutor_step_count": 3,
+      "detected_error_codes": []
+    },
+    {
+      "scenario": "S3_WINDOWS_UPDATE_ERROR",
+      "name": "Windows Update Error Dialog (0x80070422)",
+      "status": "REAL_PASS",
+      "latency_ms": 10136,
+      "vision_status": "VISION_SUCCESS",
+      "domain_pass": true,
+      "critical_pass": true,
+      "tool_allowlist_pass": true,
+      "plan_tools": [
+        "check_internet_connectivity",
+        "get_windows_update_diagnostics",
+        "get_windows_update_service_status",
+        "restart_windows_update_service",
+        "get_windows_update_service_status"
+      ],
+      "invalid_tools": [],
+      "tutor_title": "Windows Update Error & Diagnostics \u2014 Step-by-Step Solution Guide",
+      "tutor_step_count": 3,
+      "detected_error_codes": [
+        "0x80070422"
+      ]
+    },
+    {
+      "scenario": "S4_HIGH_CPU_TASK_MANAGER",
+      "name": "Task Manager High CPU (99% System Interrupts)",
+      "status": "REAL_PASS",
+      "latency_ms": 7428,
+      "vision_status": "VISION_SUCCESS",
+      "domain_pass": true,
+      "critical_pass": true,
+      "tool_allowlist_pass": true,
+      "plan_tools": [
+        "get_complete_system_info",
+        "get_cpu_diagnostics",
+        "get_memory_diagnostics",
+        "get_top_cpu_processes",
+        "get_top_memory_processes"
+      ],
+      "invalid_tools": [],
+      "tutor_title": "Power & Battery Management \u2014 Step-by-Step Diagnostic Guide",
+      "tutor_step_count": 3,
+      "detected_error_codes": []
+    },
+    {
+      "scenario": "S5_LOW_DISK_SPACE",
+      "name": "File Explorer Low Disk Space (Drive C: 2.1 GB)",
+      "status": "REAL_PASS",
+      "latency_ms": 6947,
+      "vision_status": "VISION_SUCCESS",
+      "domain_pass": true,
+      "critical_pass": true,
+      "tool_allowlist_pass": true,
+      "plan_tools": [
+        "get_complete_system_info",
+        "get_storage_diagnostics",
+        "get_temp_storage_info",
+        "clean_user_temp_cache",
+        "get_temp_storage_info"
+      ],
+      "invalid_tools": [],
+      "tutor_title": "Low Disk Space & Storage \u2014 Step-by-Step Solution Guide",
+      "tutor_step_count": 3,
+      "detected_error_codes": []
+    },
+    {
+      "scenario": "S6_APPLICATION_CRASH",
+      "name": "Application Crash Error Dialog (0xc0000005)",
+      "status": "REAL_PASS",
+      "latency_ms": 10711,
+      "vision_status": "VISION_SUCCESS",
+      "domain_pass": true,
+      "critical_pass": true,
+      "tool_allowlist_pass": true,
+      "plan_tools": [
+        "get_application_crash_summary",
+        "get_application_crash_diagnostics",
+        "get_recent_application_crashes"
+      ],
+      "invalid_tools": [],
+      "tutor_title": "Application Crash & Exception \u2014 Step-by-Step Diagnostic Guide",
+      "tutor_step_count": 3,
+      "detected_error_codes": [
+        "0xc0000005"
+      ]
+    },
+    {
+      "scenario": "S7_DEFENDER_WARNING",
+      "name": "Windows Defender Warning (Threat Wacatac)",
+      "status": "REAL_PASS",
+      "latency_ms": 11185,
+      "vision_status": "VISION_SUCCESS",
+      "domain_pass": true,
+      "critical_pass": true,
+      "tool_allowlist_pass": true,
+      "plan_tools": [
+        "get_defender_diagnostics",
+        "get_defender_service_status"
+      ],
+      "invalid_tools": [],
+      "tutor_title": "Windows Security & Defender Alert \u2014 Step-by-Step Diagnostic Guide",
+      "tutor_step_count": 3,
+      "detected_error_codes": []
+    },
+    {
+      "scenario": "S8_DEVICE_MANAGER_DRIVER_ERROR",
+      "name": "Device Manager Driver Error (Wi-Fi Code 10)",
+      "status": "REAL_PASS",
+      "latency_ms": 6431,
+      "vision_status": "VISION_SUCCESS",
+      "domain_pass": true,
+      "critical_pass": true,
+      "tool_allowlist_pass": true,
+      "plan_tools": [
+        "get_complete_system_info",
+        "check_dns_resolution",
+        "check_internet_connectivity",
+        "get_network_adapters_diagnostics"
+      ],
+      "invalid_tools": [],
+      "tutor_title": "Network & Wi-Fi Diagnostic \u2014 Step-by-Step Solution Guide",
+      "tutor_step_count": 3,
+      "detected_error_codes": []
+    },
+    {
+      "scenario": "S9_CLEAN_DESKTOP",
+      "name": "Clean Windows Desktop (Normal State)",
+      "status": "REAL_PASS",
+      "latency_ms": 5521,
+      "vision_status": "VISION_SUCCESS",
+      "domain_pass": true,
+      "critical_pass": true,
+      "tool_allowlist_pass": true,
+      "plan_tools": [
+        "get_complete_system_info",
+        "get_display_diagnostics"
+      ],
+      "invalid_tools": [],
+      "tutor_title": "Screenshot Analysis & Solution Guide",
+      "tutor_step_count": 1,
+      "detected_error_codes": []
+    },
+    {
+      "scenario": "S10_DARK_BLUETOOTH_OFF",
+      "name": "Windows 11 Dark Theme (Bluetooth Off)",
+      "status": "REAL_PASS",
+      "latency_ms": 5751,
+      "vision_status": "VISION_SUCCESS",
+      "domain_pass": true,
+      "critical_pass": true,
+      "tool_allowlist_pass": true,
+      "plan_tools": [
+        "get_bluetooth_radio_status",
+        "get_bluetooth_diagnostics",
+        "get_bluetooth_service_status"
+      ],
+      "invalid_tools": [],
+      "tutor_title": "Bluetooth Disabled / Inactive \u2014 Step-by-Step Diagnostic & Solution Guide",
+      "tutor_step_count": 4,
+      "detected_error_codes": []
+    }
+  ]
+}

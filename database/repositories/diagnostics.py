@@ -45,6 +45,24 @@ class DiagnosticRepository:
             "created_at": now_str,
         }
 
+    def create_diagnostic_record(
+        self,
+        session_id: str,
+        tool_name: str,
+        category: str,
+        raw_output: Optional[str] = None,
+        summary: Optional[str] = None,
+        diagnostic_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Convenience method for creating a diagnostic record with category and raw output."""
+        return self.create(
+            session_id=session_id,
+            tool_name=tool_name,
+            status=category,
+            evidence_json=raw_output,
+            diagnostic_id=diagnostic_id,
+        )
+
     def get(self, diagnostic_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve a single diagnostic record by ID."""
         query = "SELECT * FROM diagnostics WHERE id = ?;"

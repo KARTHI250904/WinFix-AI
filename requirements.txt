@@ -2,3 +2,7 @@ streamlit
 ollama
 psutil
 pywin32
+faster-whisper
+av
+pyyaml
+pillow

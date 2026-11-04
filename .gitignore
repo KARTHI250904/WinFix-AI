@@ -1,50 +1,33 @@
-# Python
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
 
-# Virtual environments
 .venv/
-venv/
-env/
-ENV/
 
-# Environment / secrets
 .env
-.env.*
-!.env.example
 
-# SQLite / local databases
 *.db
 *.sqlite
 *.sqlite3
 
-# Test / coverage
-.pytest_cache/
-.coverage
-htmlcov/
-coverage.xml
+*.log
 
-# IDE
 .vscode/
 .idea/
 
-# OS
-.DS_Store
+.pytest_cache/
+.coverage
+htmlcov/
+
 Thumbs.db
-desktop.ini
+Desktop.ini
 
-# Logs
-*.log
-
-# Temporary files
 *.tmp
 *.temp
-*.bak
 
-# Streamlit
-.streamlit/secrets.toml
+# Build and packaging artifacts
+build/dist/
+build/artifacts/
 
-# Local caches
-.cache/
+# Tool traces and unrelated files
+.playwright-mcp/
+*.pdf

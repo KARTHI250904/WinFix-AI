@@ -1,0 +1,370 @@
+{
+  "baseline": [
+    {
+      "id": "B01",
+      "target": "My Wi-Fi keeps disconnecting every few minutes.",
+      "recognized": "My Wi-Fi keeps disconnecting every few minutes.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 3.55,
+      "proc_time_ms": 2110,
+      "expected_domain": "NETWORK",
+      "detected_domains": [
+        "NETWORK"
+      ],
+      "domain_match": true,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "DIAGNOSE",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "B02",
+      "target": "Why is my CPU running at 100 percent in Task Manager?",
+      "recognized": "Why is my CPU running at 100% in Task Manager?",
+      "wer": 0.18181818181818182,
+      "cer": 0.1509433962264151,
+      "audio_dur_s": 4.58,
+      "proc_time_ms": 830,
+      "expected_domain": "PERFORMANCE",
+      "detected_domains": [
+        "PERFORMANCE"
+      ],
+      "domain_match": true,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "DIAGNOSE",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "B03",
+      "target": "My C drive is almost full and I need to free up disk space.",
+      "recognized": "My C drive is almost full and I need to free up disk space.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 4.3,
+      "proc_time_ms": 840,
+      "expected_domain": "STORAGE",
+      "detected_domains": [
+        "STORAGE"
+      ],
+      "domain_match": true,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "DIAGNOSE",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "B04",
+      "target": "Bluetooth is not detecting my wireless headphones.",
+      "recognized": "Bluetooth is not detecting my wireless headphones.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 3.85,
+      "proc_time_ms": 770,
+      "expected_domain": "BLUETOOTH",
+      "detected_domains": [
+        "BLUETOOTH"
+      ],
+      "domain_match": true,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "DIAGNOSE",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "B05",
+      "target": "Windows Update failed to install with error code 0x80070422.",
+      "recognized": "Windows Update failed to install with error code 0x80070422",
+      "wer": 0.0,
+      "cer": 0.016666666666666666,
+      "audio_dur_s": 6.6,
+      "proc_time_ms": 900,
+      "expected_domain": "WINDOWS_UPDATE",
+      "detected_domains": [
+        "WINDOWS_UPDATE"
+      ],
+      "domain_match": true,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "DIAGNOSE",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "B06",
+      "target": "Google Chrome crashed and is not opening anymore.",
+      "recognized": "Google Chrome crashed and is not opening anymore.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 3.47,
+      "proc_time_ms": 790,
+      "expected_domain": "APPLICATION_CRASH",
+      "detected_domains": [
+        "APPLICATION_CRASH"
+      ],
+      "domain_match": true,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "DIAGNOSE",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "B07",
+      "target": "The wuauserv service is stopped and will not start.",
+      "recognized": "The wuauserv service is stopped and will not start.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 3.48,
+      "proc_time_ms": 890,
+      "expected_domain": "WINDOWS_UPDATE",
+      "detected_domains": [
+        "WINDOWS_UPDATE",
+        "SERVICE"
+      ],
+      "domain_match": true,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "CHECK_STATUS",
+      "intent_match": false,
+      "confidence": 1
+    },
+    {
+      "id": "B08",
+      "target": "How do I view my previous Windows Update failures?",
+      "recognized": "How do I view my previous Windows Update failures?",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 3.76,
+      "proc_time_ms": 810,
+      "expected_domain": "WINDOWS_UPDATE",
+      "detected_domains": [
+        "WINDOWS_UPDATE"
+      ],
+      "domain_match": true,
+      "expected_intent": "VIEW_HISTORY",
+      "detected_intent": "VIEW_HISTORY",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "B09",
+      "target": "My Wi-Fi is connected but says no internet access.",
+      "recognized": "My Wi-Fi is connected but says no Internet access.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 4.04,
+      "proc_time_ms": 830,
+      "expected_domain": "NETWORK",
+      "detected_domains": [
+        "NETWORK"
+      ],
+      "domain_match": true,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "DIAGNOSE",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "B10",
+      "target": "Can you check if Windows Defender real-time protection is turned on?",
+      "recognized": "Can you check if Windows Defender real-time protection is turned on?",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 4.46,
+      "proc_time_ms": 850,
+      "expected_domain": "DEFENDER",
+      "detected_domains": [
+        "DEFENDER"
+      ],
+      "domain_match": true,
+      "expected_intent": "CHECK_STATUS",
+      "detected_intent": "CHECK_STATUS",
+      "intent_match": true,
+      "confidence": 1
+    }
+  ],
+  "unseen": [
+    {
+      "id": "U01",
+      "target": "My printer is showing as offline and printing nothing.",
+      "recognized": "My printer is showing as offline and printing nothing.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 3.65,
+      "proc_time_ms": 840,
+      "expected_domain": "GENERAL",
+      "detected_domains": [
+        "NETWORK"
+      ],
+      "domain_match": false,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "DIAGNOSE",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "U02",
+      "target": "The laptop fans are loud and Windows is freezing up.",
+      "recognized": "The laptop fans are loud and windows is freezing up.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 3.7,
+      "proc_time_ms": 870,
+      "expected_domain": "PERFORMANCE",
+      "detected_domains": [
+        "PERFORMANCE"
+      ],
+      "domain_match": true,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "DIAGNOSE",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "U03",
+      "target": "I have a yellow exclamation mark on my graphics driver.",
+      "recognized": "I have a yellow exclamation mark on my graphics driver.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 3.89,
+      "proc_time_ms": 840,
+      "expected_domain": "GENERAL",
+      "detected_domains": [
+        "GENERAL"
+      ],
+      "domain_match": true,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "DIAGNOSE",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "U04",
+      "target": "Need to clean up temp files because C drive has zero space.",
+      "recognized": "Need to clean up temp files because C drive has zero space.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 4.42,
+      "proc_time_ms": 780,
+      "expected_domain": "STORAGE",
+      "detected_domains": [
+        "STORAGE"
+      ],
+      "domain_match": true,
+      "expected_intent": "REPAIR",
+      "detected_intent": "REPAIR",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "U05",
+      "target": "DNS server is not responding when browsing websites.",
+      "recognized": "DNS server is not responding when browsing websites.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 4.17,
+      "proc_time_ms": 720,
+      "expected_domain": "NETWORK",
+      "detected_domains": [
+        "NETWORK",
+        "APPLICATION_CRASH"
+      ],
+      "domain_match": true,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "DIAGNOSE",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "U06",
+      "target": "Audio service is not running and there is a red cross on volume.",
+      "recognized": "Audio service is not running and there is a red cross on volume.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 4.33,
+      "proc_time_ms": 810,
+      "expected_domain": "SERVICE",
+      "detected_domains": [
+        "SERVICE"
+      ],
+      "domain_match": true,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "CHECK_STATUS",
+      "intent_match": false,
+      "confidence": 1
+    },
+    {
+      "id": "U07",
+      "target": "Blue screen of death occurred with system thread exception not handled.",
+      "recognized": "Blue screen of death occurred with system threat exception not handled.",
+      "wer": 0.09090909090909091,
+      "cer": 0.014084507042253521,
+      "audio_dur_s": 4.39,
+      "proc_time_ms": 770,
+      "expected_domain": "APPLICATION_CRASH",
+      "detected_domains": [
+        "DEFENDER",
+        "APPLICATION_CRASH"
+      ],
+      "domain_match": true,
+      "expected_intent": "DIAGNOSE",
+      "detected_intent": "DIAGNOSE",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "U08",
+      "target": "How can I see what is taking up my RAM memory?",
+      "recognized": "How can I see what is taking up my RAM memory?",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 3.47,
+      "proc_time_ms": 860,
+      "expected_domain": "PERFORMANCE",
+      "detected_domains": [
+        "PERFORMANCE"
+      ],
+      "domain_match": true,
+      "expected_intent": "CHECK_STATUS",
+      "detected_intent": "CHECK_STATUS",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "U09",
+      "target": "Disable Bluetooth and turn on airplane mode.",
+      "recognized": "Disable Bluetooth and turn on airplane mode.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 3.44,
+      "proc_time_ms": 780,
+      "expected_domain": "BLUETOOTH",
+      "detected_domains": [
+        "BLUETOOTH"
+      ],
+      "domain_match": true,
+      "expected_intent": "CONFIGURE",
+      "detected_intent": "CONFIGURE",
+      "intent_match": true,
+      "confidence": 1
+    },
+    {
+      "id": "U10",
+      "target": "Restart wuauserv service to fix failed updates.",
+      "recognized": "Restart wuauserv service to fix failed updates.",
+      "wer": 0.0,
+      "cer": 0.0,
+      "audio_dur_s": 3.68,
+      "proc_time_ms": 810,
+      "expected_domain": "WINDOWS_UPDATE",
+      "detected_domains": [
+        "WINDOWS_UPDATE",
+        "SERVICE"
+      ],
+      "domain_match": true,
+      "expected_intent": "REPAIR",
+      "detected_intent": "REPAIR",
+      "intent_match": true,
+      "confidence": 1
+    }
+  ]
+}

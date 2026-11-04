@@ -27,7 +27,12 @@ from agent.safety import SafetyEngine
 from agent.tool_metadata import RiskLevel
 from agent.tool_registry import ToolRegistry, create_default_registry
 from database.db import DatabaseManager
-from database.repositories import SessionRepository, SolutionRepository, ToolExecutionRepository
+from database.repositories import (
+    DiagnosticRepository,
+    SessionRepository,
+    SolutionRepository,
+    ToolExecutionRepository,
+)
 import windows
 from windows.performance_repairs import (
     PROTECTED_PROCESS_NAMES,
@@ -248,6 +253,35 @@ class TestPerformanceOrchestratorAndVerificationLifecycle(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+
+    def test_performance_diagnostics_records_to_sqlite(self) -> None:
+        """Verify PerformanceDiagnosticsOrchestrator records diagnostic evidence to SQLite."""
+        session_repo = SessionRepository(self.db_manager)
+        session_repo.create(session_id="sess_diag_01")
+        diag_repo = DiagnosticRepository(self.db_manager)
+
+        diag_orchestrator = PerformanceDiagnosticsOrchestrator(
+            safety_engine=self.safety_engine,
+            db_mgr=self.db_manager,
+        )
+
+        diagnosis = diag_orchestrator.run_diagnostics(session_id="sess_diag_01")
+        self.assertIsNotNone(diagnosis)
+        self.assertIn(diagnosis.problem_category, [
+            "high_cpu",
+            "high_memory",
+            "disk_pressure",
+            "process_issue",
+            "general_performance",
+        ])
+
+        records = diag_repo.list_for_session("sess_diag_01")
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["tool_name"], "performance_diagnostics")
+        self.assertEqual(records[0]["status"], diagnosis.problem_category)
+        self.assertIsNotNone(records[0]["evidence_json"])
+        evidence = json.loads(records[0]["evidence_json"])
+        self.assertEqual(evidence["problem_category"], diagnosis.problem_category)
 
     def test_confirmation_token_mismatch_fails_closed(self) -> None:
         """Verify tampered confirmation token is rejected before execution."""

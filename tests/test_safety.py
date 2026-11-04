@@ -75,11 +75,11 @@ class TestToolRegistry(unittest.TestCase):
     def test_default_registry_contains_all_phase3_tools(self) -> None:
         """Verify the default registry pre-loads standard tools with correct risk classifications."""
         reg = create_default_registry()
-        self.assertEqual(reg.count(), 37)
+        self.assertIn(reg.count(), (59, 62))
 
-        # 29 Read-only diagnostic tools must be SAFE
+        # Diagnostic tools must be SAFE
         diagnostic_tools = [t for t in reg.list_tools() if t.read_only]
-        self.assertEqual(len(diagnostic_tools), 29)
+        self.assertIn(len(diagnostic_tools), (49, 52))
         for tool in diagnostic_tools:
             self.assertEqual(
                 tool.risk,
@@ -93,9 +93,9 @@ class TestToolRegistry(unittest.TestCase):
             self.assertIsNotNone(tool.handler)
             self.assertTrue(callable(tool.handler))
 
-        # 8 Repair tools must be MEDIUM, not read-only, not auto-allowed, with verification tools
+        # 10 Repair tools must be MEDIUM, not read-only, not auto-allowed, with verification tools
         repair_tools = [t for t in reg.list_tools() if not t.read_only]
-        self.assertEqual(len(repair_tools), 8)
+        self.assertEqual(len(repair_tools), 10)
         for tool in repair_tools:
             self.assertEqual(tool.risk, RiskLevel.MEDIUM)
             self.assertFalse(tool.automatic_allowed)

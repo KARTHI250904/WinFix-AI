@@ -189,6 +189,36 @@ class TestServiceDiagnosticsTools(unittest.TestCase):
         self.assertEqual(res["data"]["total_running"], 5)
         self.assertEqual(res["data"]["total_stopped"], 5)
 
+    @patch("windows.service_tools.psutil.win_service_iter")
+    def test_get_services_diagnostics_handles_queryserviceconfig2w_error(self, mock_iter: MagicMock) -> None:
+        """Verify get_services_diagnostics does not crash when QueryServiceConfig2W raises FileNotFoundError."""
+        broken_svc = MagicMock()
+        broken_svc.as_dict.side_effect = FileNotFoundError("[WinError 2] The system cannot find the file specified: '(originated from QueryServiceConfig2W)'")
+        broken_svc.name.return_value = "WaaSMedicSvc"
+        broken_svc.display_name.return_value = "WaaSMedicSvc"
+        broken_svc.status.return_value = "stopped"
+        broken_svc.start_type.return_value = "manual"
+        broken_svc.pid.return_value = None
+        broken_svc.description.side_effect = FileNotFoundError("[WinError 2] The system cannot find the file specified")
+
+        working_svc = MagicMock()
+        working_svc.as_dict.return_value = {
+            "name": "wuauserv",
+            "display_name": "Windows Update",
+            "status": "running",
+            "start_type": "auto",
+            "pid": 500,
+        }
+
+        mock_iter.return_value = [broken_svc, working_svc]
+
+        res = get_services_diagnostics(limit=10)
+        self.assertTrue(res["success"])
+        self.assertEqual(res["data"]["returned_count"], 2)
+        names = [s["name"] for s in res["data"]["services"]]
+        self.assertIn("WaaSMedicSvc", names)
+        self.assertIn("wuauserv", names)
+
     @patch("windows.service_tools.get_service_status")
     def test_list_common_services(self, mock_status: MagicMock) -> None:
         mock_status.return_value = {

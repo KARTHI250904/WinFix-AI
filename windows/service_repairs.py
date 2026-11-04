@@ -255,12 +255,24 @@ def start_service(service_name: str) -> Dict[str, Any]:
             }
     except Exception as exc:
         logger.error("StartService failed for %s: %s", clean_name, exc)
+        err_str = str(exc)
+        is_access_denied = "access is denied" in err_str.lower() or "(5," in err_str or "error 5" in err_str.lower()
+        err_code = "ACCESS_DENIED" if is_access_denied else "START_SERVICE_FAILED"
+        err_msg = (
+            f"Administrator privileges required to start service '{clean_name}'. Please run WinFix AI as Administrator (Elevated)."
+            if is_access_denied else err_str
+        )
         return {
             "success": False,
             "tool": tool_name,
             "domain": domain,
-            "data": None,
-            "error": {"code": "START_SERVICE_FAILED", "message": str(exc)},
+            "data": {
+                "service_name": clean_name,
+                "before_state": before_status,
+                "after_state": before_status,
+                "verification": "failed",
+            },
+            "error": {"code": err_code, "message": err_msg},
         }
 
     # 4. Wait & Verify
@@ -443,12 +455,24 @@ def stop_service(service_name: str) -> Dict[str, Any]:
             }
     except Exception as exc:
         logger.error("StopService failed for %s: %s", clean_name, exc)
+        err_str = str(exc)
+        is_access_denied = "access is denied" in err_str.lower() or "(5," in err_str or "error 5" in err_str.lower()
+        err_code = "ACCESS_DENIED" if is_access_denied else "STOP_SERVICE_FAILED"
+        err_msg = (
+            f"Administrator privileges required to stop service '{clean_name}'. Please run WinFix AI as Administrator (Elevated)."
+            if is_access_denied else err_str
+        )
         return {
             "success": False,
             "tool": tool_name,
             "domain": domain,
-            "data": None,
-            "error": {"code": "STOP_SERVICE_FAILED", "message": str(exc)},
+            "data": {
+                "service_name": clean_name,
+                "before_state": before_status,
+                "after_state": before_status,
+                "verification": "failed",
+            },
+            "error": {"code": err_code, "message": err_msg},
         }
 
     # 5. Wait & Verify
@@ -538,6 +562,7 @@ def restart_service(service_name: str) -> Dict[str, Any]:
     # If stopped, just start it
     if before_status == "STOPPED":
         start_res = start_service(clean_name)
+        start_data = start_res.get("data") or {}
         if start_res["success"]:
             return {
                 "success": True,
@@ -548,7 +573,7 @@ def restart_service(service_name: str) -> Dict[str, Any]:
                     "display_name": before_data.get("display_name", clean_name),
                     "operation": "restart",
                     "before_state": before_status,
-                    "after_state": start_res["data"].get("after_state", "RUNNING"),
+                    "after_state": start_data.get("after_state", "RUNNING"),
                     "verification": "verified",
                     "message": f"Service '{clean_name}' was stopped and has been started successfully.",
                 },
@@ -562,7 +587,7 @@ def restart_service(service_name: str) -> Dict[str, Any]:
                 "data": {
                     "service_name": clean_name,
                     "before_state": before_status,
-                    "after_state": "STOPPED",
+                    "after_state": start_data.get("after_state", "STOPPED"),
                     "verification": "failed",
                 },
                 "error": start_res.get("error", {"code": "START_FAILED", "message": "Failed to start service during restart."}),
@@ -571,6 +596,7 @@ def restart_service(service_name: str) -> Dict[str, Any]:
     # 4. Stop service
     stop_res = stop_service(clean_name)
     if not stop_res["success"]:
+        stop_data = stop_res.get("data") or {}
         return {
             "success": False,
             "tool": tool_name,
@@ -578,7 +604,7 @@ def restart_service(service_name: str) -> Dict[str, Any]:
             "data": {
                 "service_name": clean_name,
                 "before_state": before_status,
-                "after_state": stop_res.get("data", {}).get("after_state", before_status),
+                "after_state": stop_data.get("after_state", before_status),
                 "verification": "failed",
             },
             "error": stop_res.get("error", {"code": "STOP_FAILED", "message": "Failed to stop service during restart sequence."}),
@@ -586,7 +612,8 @@ def restart_service(service_name: str) -> Dict[str, Any]:
 
     # 5. Start service
     start_res = start_service(clean_name)
-    final_status = start_res.get("data", {}).get("after_state", "UNKNOWN") if start_res.get("data") else "UNKNOWN"
+    start_data = start_res.get("data") or {}
+    final_status = start_data.get("after_state", "UNKNOWN")
     verification = "verified" if start_res["success"] else "not_verified"
 
     return {

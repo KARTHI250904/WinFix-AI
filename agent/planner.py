@@ -144,8 +144,8 @@ RESPONSE JSON SCHEMA:
             if not gen_res["success"]:
                 err = gen_res.get("error", "Failed to connect to local Ollama runtime.")
                 logger.warning("Planning generation failed on attempt %d: %s", attempt + 1, err)
-                # If connection failed completely, return safe fallback
-                if attempt == max_retries:
+                # If connection failed completely, immediately use safe deterministic fallback without repetitive delays
+                if "offline" in str(err).lower() or "unreachable" in str(err).lower() or attempt == max_retries:
                     fallback = self._create_deterministic_fallback_plan(problem_description)
                     return True, fallback, f"Ollama unavailable ({err}). Used deterministic fallback."
                 continue
@@ -325,7 +325,7 @@ Return strictly JSON conforming to:
             self.problem_repo.create(
                 session_id=sid,
                 raw_input=problem_description,
-                problem_type="general",
+                category="general",
             )
         except Exception as db_err:
             logger.debug("Database session record note: %s", db_err)

@@ -40,6 +40,10 @@ class ToolRegistry:
         """Retrieve a registered tool definition by name."""
         return self._tools.get(tool_name)
 
+    def get_tool(self, tool_name: str) -> Optional[ToolDefinition]:
+        """Retrieve a registered tool definition by name (alias for get)."""
+        return self.get(tool_name)
+
     def list_tools(self, domain: Optional[str] = None) -> List[ToolDefinition]:
         """List registered tool definitions, optionally filtered by domain."""
         if domain:
@@ -830,7 +834,566 @@ def create_default_registry() -> ToolRegistry:
         )
     )
 
+    # 38. Windows Update Service Status (Phase 12 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_windows_update_service_status",
+            domain="windows_update",
+            description="Inspect the operational state and startup configuration of the Windows Update service ('wuauserv').",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_windows_update_service_status,
+        )
+    )
+
+    # 39. Windows Update Dependency Services (Phase 12 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_windows_update_dependency_services",
+            domain="windows_update",
+            description="Inspect the operational state of critical services required by Windows Update (BITS, CryptSvc, RpcSs, DcomLaunch).",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_windows_update_dependency_services,
+        )
+    )
+
+    # 40. Windows Update Configuration (Phase 12 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_windows_update_configuration",
+            domain="windows_update",
+            description="Inspect Windows Update registry policies and settings (AUOptions, WSUS, scheduled time) in read-only mode.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_windows_update_configuration,
+        )
+    )
+
+    # 41. Windows Update History (Phase 12 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_windows_update_history",
+            domain="windows_update",
+            description="Query recent Windows Update installation and update history in read-only mode.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            parameters={
+                "limit": ParameterSpec(
+                    name="limit",
+                    param_type=int,
+                    required=False,
+                    default=20,
+                    min_value=1,
+                    max_value=50,
+                    description="Maximum number of update history records to retrieve.",
+                ),
+            },
+            handler=windows.get_windows_update_history,
+        )
+    )
+
+    # 42. Windows Update Errors (Phase 12 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_windows_update_errors",
+            domain="windows_update",
+            description="Inspect recent Windows Update failure events and error codes from the Windows Event Log in read-only mode.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            parameters={
+                "limit": ParameterSpec(
+                    name="limit",
+                    param_type=int,
+                    required=False,
+                    default=20,
+                    min_value=1,
+                    max_value=50,
+                    description="Maximum number of error records to retrieve.",
+                ),
+            },
+            handler=windows.get_windows_update_errors,
+        )
+    )
+
+    # 43. Windows Update Health (Phase 12 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_windows_update_health",
+            domain="windows_update",
+            description="Synthesize a factual, high-level health assessment of the Windows Update subsystem based on observed evidence.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_windows_update_health,
+        )
+    )
+
+    # 44. Restart Windows Update Service (Phase 12 Repair)
+    registry.register(
+        ToolDefinition(
+            name="restart_windows_update_service",
+            domain="windows_update",
+            description="Restart the Windows Update service ('wuauserv') with sequential stop and start verification.",
+            risk=RiskLevel.MEDIUM,
+            requires_admin=True,
+            automatic_allowed=False,
+            read_only=False,
+            verification_tool="get_windows_update_service_status",
+            handler=windows.restart_windows_update_service,
+        )
+    )
+
+    # 45. Defender Service Status (Phase 13 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_defender_service_status",
+            domain="defender",
+            description="Inspect the operational state and startup configuration of the Microsoft Defender Antivirus service ('WinDefend').",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_defender_service_status,
+        )
+    )
+
+    # 46. Defender Security Health (Phase 13 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_defender_security_health",
+            domain="defender",
+            description="Synthesize a factual, high-level health assessment of Microsoft Defender based on observable signals.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_defender_security_health,
+        )
+    )
+
+    # 47. Defender Real-time Protection Status (Phase 13 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_defender_realtime_protection_status",
+            domain="defender",
+            description="Inspect whether Microsoft Defender real-time protection is currently enabled in read-only mode.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_defender_realtime_protection_status,
+        )
+    )
+
+    # 48. Defender Antivirus Status (Phase 13 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_defender_antivirus_status",
+            domain="defender",
+            description="Inspect Microsoft Defender antivirus engine, signature versions, and provider state in read-only mode.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_defender_antivirus_status,
+        )
+    )
+
+    # 49. Defender Threat Status (Phase 13 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_defender_threat_status",
+            domain="defender",
+            description="Query current active, detected, or unresolved malware and security threats in read-only mode.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_defender_threat_status,
+        )
+    )
+
+    # 50. Defender Recent Events (Phase 13 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_defender_recent_events",
+            domain="defender",
+            description="Inspect recent Microsoft Defender operational log events and detection records from Windows Event Log.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            parameters={
+                "limit": ParameterSpec(
+                    name="limit",
+                    param_type=int,
+                    required=False,
+                    default=20,
+                    min_value=1,
+                    max_value=100,
+                    description="Maximum number of Defender event records to retrieve.",
+                ),
+                "max_scan": ParameterSpec(
+                    name="max_scan",
+                    param_type=int,
+                    required=False,
+                    default=200,
+                    min_value=10,
+                    max_value=1000,
+                    description="Maximum number of log records to scan backwards.",
+                ),
+            },
+            handler=windows.get_defender_recent_events,
+        )
+    )
+
+    # 51. Defender Configuration (Phase 13 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_defender_configuration",
+            domain="defender",
+            description="Inspect allowlisted Microsoft Defender configuration and registry policies in read-only mode.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_defender_configuration,
+        )
+    )
+
+    # 52. Restart Defender Service (Phase 13 Repair)
+    registry.register(
+        ToolDefinition(
+            name="restart_defender_service",
+            domain="defender",
+            description="Restart the Microsoft Defender Antivirus service ('WinDefend') with sequential stop and start verification.",
+            risk=RiskLevel.MEDIUM,
+            requires_admin=True,
+            automatic_allowed=False,
+            read_only=False,
+            verification_tool="get_defender_service_status",
+            handler=windows.restart_defender_service,
+        )
+    )
+
+    # 53. Application Crash Details (Phase 14 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_application_crash_details",
+            domain="applications",
+            description="Retrieve detailed crash records for a specific application name from Windows Event Log.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            parameters={
+                "application_name": ParameterSpec(
+                    name="application_name",
+                    param_type=str,
+                    required=False,
+                    default=None,
+                    description="Optional application executable name to filter crash details for.",
+                ),
+                "limit": ParameterSpec(
+                    name="limit",
+                    param_type=int,
+                    required=False,
+                    default=10,
+                    min_value=1,
+                    max_value=50,
+                    description="Maximum number of crash detail records to return.",
+                ),
+                "max_scan": ParameterSpec(
+                    name="max_scan",
+                    param_type=int,
+                    required=False,
+                    default=200,
+                    min_value=10,
+                    max_value=1000,
+                    description="Maximum number of log events to scan backwards.",
+                ),
+            },
+            handler=windows.get_application_crash_details,
+        )
+    )
+
+    # 54. Application Crash Summary (Phase 14 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_application_crash_summary",
+            domain="applications",
+            description="Aggregate high-level summary of recent application crashes across a bounded time window.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            parameters={
+                "time_window": ParameterSpec(
+                    name="time_window",
+                    param_type=str,
+                    required=False,
+                    default="24h",
+                    allowed_values=["1h", "6h", "24h", "7d", "30d"],
+                    description="Time window for aggregating crash metrics ('1h', '6h', '24h', '7d', '30d').",
+                ),
+                "limit": ParameterSpec(
+                    name="limit",
+                    param_type=int,
+                    required=False,
+                    default=20,
+                    min_value=1,
+                    max_value=50,
+                    description="Maximum number of crash events to inspect.",
+                ),
+                "max_scan": ParameterSpec(
+                    name="max_scan",
+                    param_type=int,
+                    required=False,
+                    default=200,
+                    min_value=10,
+                    max_value=1000,
+                    description="Maximum number of log records to scan backwards.",
+                ),
+            },
+            handler=windows.get_application_crash_summary,
+        )
+    )
+
+    # 55. Application Crash Frequency (Phase 14 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_application_crash_frequency",
+            domain="applications",
+            description="Calculate deterministic recurrence frequencies and time-window metrics for application crashes.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            parameters={
+                "time_window": ParameterSpec(
+                    name="time_window",
+                    param_type=str,
+                    required=False,
+                    default="24h",
+                    allowed_values=["1h", "6h", "24h", "7d", "30d"],
+                    description="Time window for frequency calculation ('1h', '6h', '24h', '7d', '30d').",
+                ),
+                "limit": ParameterSpec(
+                    name="limit",
+                    param_type=int,
+                    required=False,
+                    default=20,
+                    min_value=1,
+                    max_value=50,
+                    description="Maximum number of crash events to inspect.",
+                ),
+                "max_scan": ParameterSpec(
+                    name="max_scan",
+                    param_type=int,
+                    required=False,
+                    default=200,
+                    min_value=10,
+                    max_value=1000,
+                    description="Maximum number of log records to scan backwards.",
+                ),
+            },
+            handler=windows.get_application_crash_frequency,
+        )
+    )
+
+    # 56. Faulting Module Information (Phase 14 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_faulting_module_information",
+            domain="applications",
+            description="Inspect observed faulting modules and DLL associations from crash event records in read-only mode.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            parameters={
+                "module_name": ParameterSpec(
+                    name="module_name",
+                    param_type=str,
+                    required=False,
+                    default=None,
+                    description="Optional DLL or binary module name to filter observed faults for.",
+                ),
+                "limit": ParameterSpec(
+                    name="limit",
+                    param_type=int,
+                    required=False,
+                    default=10,
+                    min_value=1,
+                    max_value=50,
+                    description="Maximum number of module records to retrieve.",
+                ),
+                "max_scan": ParameterSpec(
+                    name="max_scan",
+                    param_type=int,
+                    required=False,
+                    default=200,
+                    min_value=10,
+                    max_value=1000,
+                    description="Maximum number of log events to scan backwards.",
+                ),
+            },
+            handler=windows.get_faulting_module_information,
+        )
+    )
+
+    # 57. Windows Error Reporting Status (Phase 14 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_windows_error_reporting_status",
+            domain="applications",
+            description="Inspect Windows Error Reporting (WER) service status and read-only policy configuration.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_windows_error_reporting_status,
+        )
+    )
+
+    # 58. Application Crash Events (Phase 14 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_application_crash_events",
+            domain="applications",
+            description="Retrieve bounded, sanitized application crash event records filtered by time window and application.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            parameters={
+                "time_window": ParameterSpec(
+                    name="time_window",
+                    param_type=str,
+                    required=False,
+                    default="24h",
+                    allowed_values=["1h", "6h", "24h", "7d", "30d"],
+                    description="Time window for event collection ('1h', '6h', '24h', '7d', '30d').",
+                ),
+                "limit": ParameterSpec(
+                    name="limit",
+                    param_type=int,
+                    required=False,
+                    default=10,
+                    min_value=1,
+                    max_value=50,
+                    description="Maximum number of events to return.",
+                ),
+                "max_scan": ParameterSpec(
+                    name="max_scan",
+                    param_type=int,
+                    required=False,
+                    default=200,
+                    min_value=10,
+                    max_value=1000,
+                    description="Maximum number of log records to scan backwards.",
+                ),
+                "application_name": ParameterSpec(
+                    name="application_name",
+                    param_type=str,
+                    required=False,
+                    default=None,
+                    description="Optional application executable name to filter crash events for.",
+                ),
+            },
+            handler=windows.get_application_crash_events,
+        )
+    )
+
+    # 59. Application Crash Diagnostics Orchestrator (Phase 14 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_application_crash_diagnostics",
+            domain="applications",
+            description="Perform complete structured diagnostic analysis of Windows application crash evidence and WER state.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            parameters={
+                "time_window": ParameterSpec(
+                    name="time_window",
+                    param_type=str,
+                    required=False,
+                    default="24h",
+                    allowed_values=["1h", "6h", "24h", "7d", "30d"],
+                    description="Time window for crash analysis ('1h', '6h', '24h', '7d', '30d').",
+                ),
+                "limit": ParameterSpec(
+                    name="limit",
+                    param_type=int,
+                    required=False,
+                    default=10,
+                    min_value=1,
+                    max_value=50,
+                    description="Maximum number of crash events to analyze.",
+                ),
+            },
+            handler=windows.get_application_crash_diagnostics,
+        )
+    )
+
+    # 60. Display Diagnostics (Phase 30 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_display_diagnostics",
+            domain="display",
+            description="Inspect display adapters, active monitors, screen resolution, and Night Light status.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_display_diagnostics,
+        )
+    )
+
+    # 61. Audio Diagnostics (Phase 30 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_audio_diagnostics",
+            domain="audio",
+            description="Inspect Windows Audio subsystem health, core audio services, and device counts.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_audio_diagnostics,
+        )
+    )
+
+    # 62. Audio Endpoint Status (Phase 30 Diagnostic)
+    registry.register(
+        ToolDefinition(
+            name="get_audio_endpoint_status",
+            domain="audio",
+            description="Inspect status of audio playback and recording endpoints.",
+            risk=RiskLevel.SAFE,
+            requires_admin=False,
+            automatic_allowed=True,
+            read_only=True,
+            handler=windows.get_audio_endpoint_status,
+        )
+    )
+
     return registry
+
 
 
 # Shared default global registry instance

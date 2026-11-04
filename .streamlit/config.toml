@@ -1,0 +1,23 @@
+# Streamlit Local Offline Configuration for WinFix AI
+
+[browser]
+gatherUsageStats = false
+serverAddress = "localhost"
+
+[server]
+port = 8501
+address = "0.0.0.0"
+headless = false
+enableCORS = false
+enableXsrfProtection = true
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+base = "light"
+primaryColor = "#0078D4"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F8FAFC"
+textColor = "#1E293B"
+font = "sans serif"

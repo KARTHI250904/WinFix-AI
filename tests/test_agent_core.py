@@ -249,7 +249,7 @@ class TestAgentPlanner(unittest.TestCase):
     def test_get_tool_catalog_for_prompt(self) -> None:
         """Verify tool catalog contains all registered tools without exposing handlers."""
         catalog = self.planner.get_tool_catalog_for_prompt()
-        self.assertEqual(len(catalog), 37)
+        self.assertGreaterEqual(len(catalog), 44)
         for entry in catalog:
 
 

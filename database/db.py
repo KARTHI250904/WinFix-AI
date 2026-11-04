@@ -74,10 +74,16 @@ class DatabaseManager:
                 "error": str(exc)
             }
 
-    def get_existing_tables(self) -> list[str]:
+    def get_existing_tables(self, conn: Optional[sqlite3.Connection] = None) -> list[str]:
         """Fetch list of user-created tables in the SQLite database."""
-        with self.get_connection() as conn:
+        if conn is not None:
             cursor = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;"
+            )
+            return [row["name"] for row in cursor.fetchall()]
+
+        with self.get_connection() as c:
+            cursor = c.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name;"
             )
             return [row["name"] for row in cursor.fetchall()]
@@ -89,7 +95,7 @@ class DatabaseManager:
                 cursor = conn.execute("SELECT 1 AS alive;")
                 result = cursor.fetchone()
                 alive = result is not None and result["alive"] == 1
-                tables = self.get_existing_tables()
+                tables = self.get_existing_tables(conn=conn)
                 return {
                     "connected": alive,
                     "db_path": str(self.db_path),

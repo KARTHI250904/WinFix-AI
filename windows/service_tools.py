@@ -65,6 +65,33 @@ def normalize_startup_type(startup_str: Optional[str]) -> str:
     return STARTUP_NORMALIZATION_MAP.get(clean, clean.upper() if clean else "UNKNOWN")
 
 
+def safe_service_as_dict(svc: Any) -> Dict[str, Any]:
+    """Safely extract service metadata without failing on QueryServiceConfig2W (WinError 2)."""
+    try:
+        return svc.as_dict()
+    except Exception:
+        # Fall back to querying individual attributes safely if svc.as_dict() fails on description
+        data: Dict[str, Any] = {}
+        for attr, default in [
+            ("name", "Unknown"),
+            ("display_name", "Unknown"),
+            ("binpath", ""),
+            ("username", ""),
+            ("start_type", "UNKNOWN"),
+            ("status", "UNKNOWN"),
+            ("pid", None),
+        ]:
+            try:
+                data[attr] = getattr(svc, attr)()
+            except Exception:
+                data[attr] = default
+        try:
+            data["description"] = svc.description()
+        except Exception:
+            data["description"] = ""
+        return data
+
+
 def validate_service_name(service_name: Optional[str]) -> tuple[bool, str, Optional[str]]:
     """Validate and sanitize a Windows service identifier.
 
@@ -110,7 +137,7 @@ def get_service_status(service_name: str) -> Dict[str, Any]:
 
     try:
         service = psutil.win_service_get(clean_name)
-        info = service.as_dict()
+        info = safe_service_as_dict(service)
 
         raw_status = info.get("status")
         raw_start = info.get("start_type")
@@ -171,7 +198,7 @@ def get_service_details(service_name: str) -> Dict[str, Any]:
 
     try:
         service = psutil.win_service_get(clean_name)
-        info = service.as_dict()
+        info = safe_service_as_dict(service)
 
         norm_status = normalize_service_status(info.get("status"))
         norm_start = normalize_startup_type(info.get("start_type"))
@@ -179,9 +206,9 @@ def get_service_details(service_name: str) -> Dict[str, Any]:
         # Safe description retrieval
         desc = ""
         try:
-            desc = service.description() or ""
+            desc = service.description() or info.get("description", "") or ""
         except Exception:
-            pass
+            desc = info.get("description", "") or ""
 
         # Safe username/account retrieval
         account = ""
@@ -254,7 +281,7 @@ def get_services_diagnostics(
 
         for svc in psutil.win_service_iter():
             try:
-                info = svc.as_dict()
+                info = safe_service_as_dict(svc)
                 norm_status = normalize_service_status(info.get("status"))
                 norm_start = normalize_startup_type(info.get("start_type"))
 
@@ -275,7 +302,7 @@ def get_services_diagnostics(
                         "is_running": norm_status == "RUNNING",
                         "pid": info.get("pid"),
                     })
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
+            except (psutil.NoSuchProcess, psutil.AccessDenied, OSError, Exception):
                 continue
 
         return {

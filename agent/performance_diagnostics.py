@@ -260,7 +260,8 @@ class PerformanceDiagnosticsOrchestrator:
                 self.diagnostic_repo.create(
                     session_id=session_id,
                     tool_name="performance_diagnostics",
-                    raw_data=diagnosis.to_dict(),
+                    status=category,
+                    evidence_json=json.dumps(diagnosis.to_dict()),
                 )
             except Exception as db_err:
                 logger.debug("Failed saving diagnostic record to SQLite: %s", db_err)

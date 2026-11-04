@@ -17,6 +17,9 @@ import psutil
 
 logger = logging.getLogger(__name__)
 
+_STATIC_OS_CACHE: Optional[Dict[str, Any]] = None
+_STATIC_COMPUTER_CACHE: Optional[Dict[str, Any]] = None
+
 
 def _format_bytes(bytes_num: Optional[int]) -> str:
     """Format bytes into human-readable representation (e.g. GB, MB)."""
@@ -47,8 +50,12 @@ def _format_seconds(seconds: Optional[int]) -> str:
     return ", ".join(parts)
 
 
-def get_os_info() -> Dict[str, Any]:
+def get_os_info(use_cache: bool = True) -> Dict[str, Any]:
     """Collect read-only operating system version, edition, and build numbers."""
+    global _STATIC_OS_CACHE
+    if use_cache and _STATIC_OS_CACHE is not None:
+        return dict(_STATIC_OS_CACHE)
+
     try:
         os_name = platform.system()
         os_release = platform.release()
@@ -94,7 +101,7 @@ def get_os_info() -> Dict[str, Any]:
 
         full_build = f"{build_number}.{ubr}" if (build_number != "Unknown" and ubr is not None) else (build_number if build_number != "Unknown" else os_version)
 
-        return {
+        res = {
             "status": "available",
             "name": os_name,
             "release": os_release,
@@ -106,6 +113,8 @@ def get_os_info() -> Dict[str, Any]:
             "is_windows": os_name == "Windows",
             "error": None,
         }
+        _STATIC_OS_CACHE = res
+        return dict(res)
     except Exception as exc:
         logger.error("Failed to collect OS information: %s", exc)
         return {
@@ -122,15 +131,19 @@ def get_os_info() -> Dict[str, Any]:
         }
 
 
-def get_computer_info() -> Dict[str, Any]:
+def get_computer_info(use_cache: bool = True) -> Dict[str, Any]:
     """Collect read-only computer and environment identity."""
+    global _STATIC_COMPUTER_CACHE
+    if use_cache and _STATIC_COMPUTER_CACHE is not None:
+        return dict(_STATIC_COMPUTER_CACHE)
+
     try:
         hostname = platform.node() or socket.gethostname() or os.environ.get("COMPUTERNAME", "Unknown")
         username = os.environ.get("USERNAME") or os.environ.get("USER", "Unknown")
         system_root = os.environ.get("SystemRoot", r"C:\Windows")
         system_drive = os.environ.get("SystemDrive", "C:")
 
-        return {
+        res = {
             "status": "available",
             "computer_name": hostname,
             "username": username,
@@ -138,6 +151,8 @@ def get_computer_info() -> Dict[str, Any]:
             "system_drive": system_drive,
             "error": None,
         }
+        _STATIC_COMPUTER_CACHE = res
+        return dict(res)
     except Exception as exc:
         logger.error("Failed to collect computer info: %s", exc)
         return {

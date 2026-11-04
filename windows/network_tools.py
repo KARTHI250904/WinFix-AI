@@ -14,6 +14,27 @@ import psutil
 logger = logging.getLogger(__name__)
 
 
+def _has_active_network_connection() -> bool:
+    """Fast check whether any non-loopback, non-virtual network adapter is UP with a routable IPv4 address."""
+    try:
+        stats = psutil.net_if_stats()
+        addrs = psutil.net_if_addrs()
+        for name, stat in stats.items():
+            if not stat.isup:
+                continue
+            name_lower = name.lower()
+            if any(ign in name_lower for ign in ["loopback", "pseudo", "vethernet", "virtual", "vmware", "virtualbox"]):
+                continue
+            if name in addrs:
+                for a in addrs[name]:
+                    # Exclude loopback (127.x) and APIPA auto-assigned disconnected IPs (169.254.x)
+                    if a.family == socket.AF_INET and not a.address.startswith("127.") and not a.address.startswith("169.254."):
+                        return True
+        return False
+    except Exception:
+        return False
+
+
 def get_network_adapters_diagnostics() -> Dict[str, Any]:
     """Collect read-only network adapter link state, MAC, and IP configuration."""
     tool_name = "get_network_adapters_diagnostics"
@@ -75,19 +96,48 @@ def get_network_adapters_diagnostics() -> Dict[str, Any]:
         }
 
 
-def check_dns_resolution(hostname: str = "dns.google", timeout: float = 3.0) -> Dict[str, Any]:
+def check_dns_resolution(hostname: str = "dns.google", timeout: float = 1.0) -> Dict[str, Any]:
     """Test DNS resolution for a target hostname and measure resolution latency."""
     tool_name = "check_dns_resolution"
     domain = "network"
     start_time = time.time()
+
+    if not _has_active_network_connection():
+        return {
+            "success": False,
+            "tool": tool_name,
+            "domain": domain,
+            "data": {
+                "target_host": hostname,
+                "resolved": False,
+                "resolved_ips": [],
+                "latency_ms": 0.0,
+            },
+            "error": {"code": "NO_NETWORK_INTERFACE", "message": "Network adapters are disconnected; skipping DNS resolution."},
+        }
+
     try:
-        old_timeout = socket.getdefaulttimeout()
-        socket.setdefaulttimeout(timeout)
-        try:
-            addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-            resolved_ips = list({res[4][0] for res in addr_info if res and len(res) > 4})
-        finally:
-            socket.setdefaulttimeout(old_timeout)
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(socket.getaddrinfo, hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+            try:
+                addr_info = future.result(timeout=timeout)
+                resolved_ips = list({res[4][0] for res in addr_info if res and len(res) > 4})
+            except concurrent.futures.TimeoutError:
+                latency_ms = round((time.time() - start_time) * 1000, 2)
+                return {
+                    "success": False,
+                    "tool": tool_name,
+                    "domain": domain,
+                    "data": {
+                        "target_host": hostname,
+                        "resolved": False,
+                        "resolved_ips": [],
+                        "latency_ms": latency_ms,
+                    },
+                    "error": {"code": "DNS_RESOLUTION_TIMEOUT", "message": f"DNS lookup for '{hostname}' timed out after {timeout}s."},
+                }
 
         latency_ms = round((time.time() - start_time) * 1000, 2)
         return {
@@ -131,12 +181,22 @@ def check_dns_resolution(hostname: str = "dns.google", timeout: float = 3.0) -> 
 def check_internet_connectivity(
     target_host: str = "1.1.1.1",
     port: int = 53,
-    timeout: float = 3.0,
+    timeout: float = 1.0,
 ) -> Dict[str, Any]:
     """Test direct network connectivity to an external IP and measure socket latency."""
     tool_name = "check_internet_connectivity"
     domain = "network"
     start_time = time.time()
+
+    if not _has_active_network_connection():
+        return {
+            "success": False,
+            "tool": tool_name,
+            "domain": domain,
+            "data": {"target": f"{target_host}:{port}", "reachable": False, "latency_ms": None},
+            "error": {"code": "NO_ACTIVE_ADAPTER", "message": "No active physical network adapter with IPv4 connection detected."},
+        }
+
     sock = None
     try:
         sock = socket.create_connection((target_host, port), timeout=timeout)
