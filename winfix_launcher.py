@@ -85,14 +85,9 @@ def launch_streamlit_app(
     if headless:
         cmd.extend(["--server.headless", "true"])
 
-    display_host = "localhost" if host == "0.0.0.0" else host
     print(f"Starting {__app_name__} UI (Offline Mode: {'ENABLED' if offline else 'DISABLED'})...")
     print(f"  • Local URL:   http://localhost:{port}")
-    if host == "0.0.0.0":
-        print(f"  • Loopback:    http://127.0.0.1:{port}")
-        print(f"  • Network URL: http://<Your-PC-IP>:{port} (accessible across local offline network)")
-    else:
-        print(f"  • Bound Host:  http://{host}:{port}")
+    print(f"  • Loopback:    http://127.0.0.1:{port}")
     try:
         proc = subprocess.run(cmd)
         return proc.returncode
@@ -111,7 +106,7 @@ def main() -> int:
     parser.add_argument("--check-only", action="store_true", help="Run health check and exit without launching UI")
     parser.add_argument("--setup-only", action="store_true", help="Run first-time initialization and exit")
     parser.add_argument("--migrate", action="store_true", help="Run transactional schema migration and exit")
-    parser.add_argument("--host", default="0.0.0.0", help="Host address to bind the UI server to (default: 0.0.0.0 for Local & LAN)")
+    parser.add_argument("--host", default="127.0.0.1", help="Host address to bind the UI server to (default: 127.0.0.1 for Localhost)")
     parser.add_argument("--port", type=int, default=8501, help="Port to run the UI server on (default: 8501)")
     parser.add_argument("--headless", action="store_true", help="Run Streamlit in headless mode")
     parser.add_argument("--offline", action="store_true", default=True, help="Enforce offline operation (default: True)")

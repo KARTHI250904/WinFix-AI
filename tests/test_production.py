@@ -12,8 +12,10 @@ Validates:
 8. Five-Mode Production Smoke Tests.
 """
 
-from io import BytesIO
+from io import BytesIO, StringIO
 import json
+import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import shutil
 import tempfile
@@ -147,11 +149,67 @@ class TestFirstRunAndSetup(unittest.TestCase):
 class TestProductionLoggingAndSanitization(unittest.TestCase):
     """Test production logging sanitization."""
 
+    def setUp(self):
+        self.test_dir = Path(tempfile.mkdtemp(prefix="winfix_test_logging_"))
+        self.paths = resolve_app_paths(base_data_dir=self.test_dir)
+        self.config = ProductionConfig(paths=self.paths)
+
+    def tearDown(self):
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
     def test_sanitize_windows_user_path(self):
         raw = "Error accessing C:\\Users\\Administrator\\AppData\\Local\\secret.json"
         sanitized = sanitize_log_text(raw)
         self.assertNotIn("Administrator", sanitized)
         self.assertIn("C:\\Users\\<User>\\AppData\\Local\\secret.json", sanitized)
+
+    def test_sanitize_forward_slash_user_path(self):
+        raw = "Error accessing C:/Users/Administrator/AppData/Local/secret.json"
+        sanitized = sanitize_log_text(raw)
+        self.assertNotIn("Administrator", sanitized)
+        self.assertIn("C:/Users/<User>/AppData/Local/secret.json", sanitized)
+
+    def test_sanitize_mixed_slash_user_path(self):
+        raw = "Scanning c:/Users/TestUser\\Documents\\file.txt"
+        sanitized = sanitize_log_text(raw)
+        self.assertNotIn("TestUser", sanitized)
+        self.assertIn("c:/Users/<User>\\Documents\\file.txt", sanitized)
+
+    def test_logging_setup_idempotency(self):
+        """Calling setup_production_logging repeatedly must not duplicate handlers."""
+        root_logger = logging.getLogger("winfix")
+        for _ in range(10):
+            setup_production_logging(self.config)
+
+        managed_file_handlers = [
+            h for h in root_logger.handlers
+            if getattr(h, "_winfix_managed", False) and isinstance(h, RotatingFileHandler)
+        ]
+        managed_console_handlers = [
+            h for h in root_logger.handlers
+            if getattr(h, "_winfix_managed", False) and isinstance(h, logging.StreamHandler) and not isinstance(h, RotatingFileHandler)
+        ]
+        self.assertEqual(len(managed_file_handlers), 1, "Expected exactly 1 managed file handler")
+        self.assertEqual(len(managed_console_handlers), 1, "Expected exactly 1 managed console handler")
+
+    def test_logging_setup_upgrades_preexisting_handlers(self):
+        """Pre-existing handlers without SanitizingFormatter must be safely upgraded."""
+        root_logger = logging.getLogger("winfix")
+        dummy_stream = StringIO()
+        dummy_handler = logging.StreamHandler(dummy_stream)
+        dummy_handler.setFormatter(logging.Formatter("PLAIN: %(message)s"))
+        root_logger.addHandler(dummy_handler)
+
+        try:
+            setup_production_logging(self.config)
+            self.assertIsInstance(dummy_handler.formatter, SanitizingFormatter)
+
+            root_logger.info("Accessing C:/Users/SecretOperator/Desktop/token.txt")
+            output = dummy_stream.getvalue()
+            self.assertNotIn("SecretOperator", output)
+            self.assertIn("<User>", output)
+        finally:
+            root_logger.removeHandler(dummy_handler)
 
     def test_sanitize_credentials_and_emails(self):
         raw = "Failed auth: api_key='sk-1234567890abcdef' email=test.user@company.com"

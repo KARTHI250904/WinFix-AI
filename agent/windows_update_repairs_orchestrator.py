@@ -134,7 +134,19 @@ class WindowsUpdateRepairsOrchestrator:
         session_id: Optional[str] = None,
     ) -> WindowsUpdateRepairExecutionResult:
         """Execute the confirmed Windows Update service restart with verification and SQLite audit logging."""
-        # 1. Cryptographic confirmation token validation
+        # 1. Enforce mandatory, non-empty confirmation token
+        if not user_confirmed_token or not isinstance(user_confirmed_token, str) or not user_confirmed_token.strip():
+            logger.warning("Missing or empty confirmation token for Windows Update repair %s", proposal.tool_name)
+            return WindowsUpdateRepairExecutionResult(
+                tool_name=proposal.tool_name,
+                arguments=proposal.arguments,
+                confirmed=False,
+                repair_success=False,
+                verification_status="blocked",
+                explanation="Security validation failed: Mandatory confirmation token missing or empty.",
+            )
+
+        # 2. Cryptographic confirmation token validation
         expected_token = proposal.generate_confirmation_token(session_id)
         if user_confirmed_token != expected_token:
             logger.warning("Confirmation token mismatch for Windows Update repair %s", proposal.tool_name)
@@ -144,10 +156,10 @@ class WindowsUpdateRepairsOrchestrator:
                 confirmed=False,
                 repair_success=False,
                 verification_status="blocked",
-                explanation="Operation blocked: confirmation token is missing, invalid, or expired.",
+                explanation="Security validation failed: Confirmation token does not match the proposal arguments.",
             )
 
-        # 2. Capture Before-State
+        # 3. Capture Before-State
         before_res = self.safety_engine.execute(
             tool_name="get_windows_update_service_status",
             arguments={},
@@ -155,17 +167,29 @@ class WindowsUpdateRepairsOrchestrator:
         )
         before_state = before_res.get("data") if before_res.get("success") else None
 
-        # 3. Execute controlled repair through SafetyEngine
+        # 4. Execute controlled repair through SafetyEngine
         repair_res = self.safety_engine.execute(
             tool_name=proposal.tool_name,
             arguments=proposal.arguments,
             session_id=session_id,
             user_confirmed=True,
+            confirmation_token=user_confirmed_token,
         )
 
         repair_success = bool(repair_res.get("success"))
         repair_output = repair_res.get("data")
         repair_error = repair_res.get("error")
+
+        if not repair_success and repair_error and repair_error.get("code") in ("TOKEN_ALREADY_USED", "TOKEN_REQUIRED", "SAFETY_BLOCKED", "CONFIRMATION_REQUIRED"):
+            return WindowsUpdateRepairExecutionResult(
+                tool_name=proposal.tool_name,
+                arguments=proposal.arguments,
+                confirmed=False,
+                repair_success=False,
+                verification_status="blocked",
+                explanation=repair_error.get("message", "Operation blocked."),
+                before_state=before_state,
+            )
 
         # 4. Capture After-State via verification tool
         after_res = self.safety_engine.execute(

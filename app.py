@@ -17,6 +17,12 @@ os.environ.setdefault("STREAMLIT_BROWSER_GATHER_USAGE_STATS", "false")
 
 import streamlit as st
 
+from production.config import prod_config
+from production.logging import setup_production_logging
+
+# Initialize production logging with privacy sanitization (idempotent across Streamlit script reruns)
+setup_production_logging(prod_config)
+
 from agent.application_crash_diagnostics import (
     ApplicationCrashDiagnosticsOrchestrator,
     default_application_crash_orchestrator,

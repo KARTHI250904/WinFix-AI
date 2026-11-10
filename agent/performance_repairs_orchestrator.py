@@ -166,22 +166,33 @@ class PerformanceRepairsOrchestrator:
                 explanation=f"Tool '{proposal.tool_name}' is not in the approved ToolRegistry.",
             )
 
-        # Validate confirmation token if provided
-        if confirmation_token:
-            expected_token = proposal.generate_confirmation_token(session_id)
-            if confirmation_token != expected_token:
-                logger.warning("Confirmation token mismatch for repair %s", proposal.tool_name)
-                return PerformanceRepairExecutionResult(
-                    tool_name=proposal.tool_name,
-                    arguments=proposal.arguments,
-                    confirmed=False,
-                    repair_success=False,
-                    verification_status="blocked",
-                    explanation="Security validation failed: Confirmation token does not match the proposal arguments.",
-                )
+        # 1. Enforce mandatory, non-empty confirmation token
+        if not confirmation_token or not isinstance(confirmation_token, str) or not confirmation_token.strip():
+            logger.warning("Missing or empty confirmation token for performance repair %s", proposal.tool_name)
+            return PerformanceRepairExecutionResult(
+                tool_name=proposal.tool_name,
+                arguments=proposal.arguments,
+                confirmed=False,
+                repair_success=False,
+                verification_status="blocked",
+                explanation="Security validation failed: Mandatory confirmation token missing or empty.",
+            )
 
-        # If unconfirmed, fail closed immediately without executing
-        if not user_confirmed:
+        # 2. Cryptographic parameter binding validation
+        expected_token = proposal.generate_confirmation_token(session_id)
+        if confirmation_token != expected_token:
+            logger.warning("Confirmation token mismatch for repair %s", proposal.tool_name)
+            return PerformanceRepairExecutionResult(
+                tool_name=proposal.tool_name,
+                arguments=proposal.arguments,
+                confirmed=False,
+                repair_success=False,
+                verification_status="blocked",
+                explanation="Security validation failed: Confirmation token does not match the proposal arguments.",
+            )
+
+        # 3. Explicit human confirmation gate (must be strictly True)
+        if user_confirmed is not True:
             return PerformanceRepairExecutionResult(
                 tool_name=proposal.tool_name,
                 arguments=proposal.arguments,
@@ -219,6 +230,7 @@ class PerformanceRepairsOrchestrator:
             arguments=proposal.arguments,
             session_id=session_id,
             user_confirmed=True,
+            confirmation_token=confirmation_token,
         )
 
         repair_success = bool(repair_res.get("success", False))
@@ -226,16 +238,18 @@ class PerformanceRepairsOrchestrator:
 
         # If repair execution itself failed, do not attempt automatic recovery loop
         if not repair_success:
-            err_msg = repair_res.get("error", {}).get("message", "Repair execution failed.")
+            err_dict = repair_res.get("error", {})
+            err_msg = err_dict.get("message", "Repair execution failed.")
+            is_blocked = err_dict.get("code") in ("TOKEN_ALREADY_USED", "TOKEN_REQUIRED", "SAFETY_BLOCKED", "CONFIRMATION_REQUIRED")
             return PerformanceRepairExecutionResult(
                 tool_name=proposal.tool_name,
                 arguments=proposal.arguments,
-                confirmed=True,
+                confirmed=user_confirmed if not is_blocked else False,
                 repair_success=False,
                 before_state=before_state,
                 repair_output=repair_output,
                 verification_tool=v_tool_name,
-                verification_status="failed",
+                verification_status="blocked" if is_blocked else "failed",
                 explanation=f"Repair action failed: {err_msg}",
             )
 

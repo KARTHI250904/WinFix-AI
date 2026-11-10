@@ -189,10 +189,12 @@ class TestNetworkRepairWorkflowAndVerification(unittest.TestCase):
             "data": {"resolved": True, "resolved_ips": ["8.8.8.8"]},
         }
 
+        token = proposal.generate_confirmation_token("sess_dns_01")
         result = self.orchestrator.execute_repair_with_verification(
             proposal=proposal,
             session_id="sess_dns_01",
             user_confirmed=True,
+            confirmation_token=token,
         )
 
         self.assertTrue(result.repair_success)
@@ -222,10 +224,12 @@ class TestNetworkRepairWorkflowAndVerification(unittest.TestCase):
             "error": {"code": "DLL_ERROR", "message": "Access Denied"},
         }
 
+        token = proposal.generate_confirmation_token("sess_fail_01")
         result = self.orchestrator.execute_repair_with_verification(
             proposal=proposal,
             session_id="sess_fail_01",
             user_confirmed=True,
+            confirmation_token=token,
         )
 
         self.assertFalse(result.repair_success)

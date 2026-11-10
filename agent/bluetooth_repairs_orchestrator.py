@@ -114,6 +114,8 @@ class BluetoothRepairsOrchestrator:
         session_id: Optional[str] = None,
     ) -> bool:
         """Verify that the provided confirmation token strictly matches tool, arguments, and session."""
+        if not token or not isinstance(token, str) or not token.strip():
+            return False
         expected = hashlib.sha256(
             f"{tool_name}:{json.dumps(arguments, sort_keys=True)}:{session_id or ''}".encode("utf-8")
         ).hexdigest()
@@ -148,7 +150,18 @@ class BluetoothRepairsOrchestrator:
         session_id: Optional[str] = None,
     ) -> BluetoothRepairExecutionResult:
         """Execute an approved Bluetooth repair after validating the confirmation token."""
-        # 1. Token validation
+        # 1. Enforce mandatory, non-empty confirmation token
+        if not confirmation_token or not isinstance(confirmation_token, str) or not confirmation_token.strip():
+            logger.warning("Missing or empty confirmation token for Bluetooth repair %s", tool_name)
+            return BluetoothRepairExecutionResult(
+                tool_name=tool_name,
+                arguments=arguments,
+                confirmed=False,
+                repair_success=False,
+                verification_status="blocked",
+                explanation="Security validation failed: Mandatory confirmation token missing or empty.",
+            )
+
         if not self.validate_confirmation_token(confirmation_token, tool_name, arguments, session_id):
             logger.warning("Rejected unconfirmed or tampered Bluetooth repair token for %s", tool_name)
             return BluetoothRepairExecutionResult(
@@ -157,7 +170,7 @@ class BluetoothRepairsOrchestrator:
                 confirmed=False,
                 repair_success=False,
                 verification_status="blocked",
-                explanation="Execution blocked: Confirmation token is invalid or does not match parameters/session.",
+                explanation="Security validation failed: Confirmation token does not match the proposal arguments.",
             )
 
         # 2. Allowlist tool check
@@ -185,9 +198,23 @@ class BluetoothRepairsOrchestrator:
             tool_name=tool_name,
             arguments=arguments,
             session_id=session_id,
+            user_confirmed=True,
+            confirmation_token=confirmation_token,
         )
         repair_success = repair_res.get("success", False)
         repair_output = repair_res.get("data")
+        repair_error = repair_res.get("error")
+
+        if not repair_success and repair_error and repair_error.get("code") in ("TOKEN_ALREADY_USED", "TOKEN_REQUIRED", "SAFETY_BLOCKED", "CONFIRMATION_REQUIRED"):
+            return BluetoothRepairExecutionResult(
+                tool_name=tool_name,
+                arguments=arguments,
+                confirmed=False,
+                repair_success=False,
+                verification_status="blocked",
+                explanation=repair_error.get("message", "Operation blocked."),
+                before_state=before_state,
+            )
 
         # 5. Capture After-State (Verification)
         after_res = self.safety_engine.execute(

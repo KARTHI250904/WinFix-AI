@@ -36,7 +36,7 @@ echo     Loopback:    http://127.0.0.1:8501
 echo ========================================================
 echo.
 
-"%PY_EXE%" "%~dp0winfix_launcher.py" --host 0.0.0.0 --port 8501
+"%PY_EXE%" "%~dp0winfix_launcher.py" --host 127.0.0.1 --port 8501
 
 if %errorlevel% neq 0 (
     echo.
