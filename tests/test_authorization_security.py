@@ -13,12 +13,13 @@ Tests:
 9. Streamlit rerun replay defense in UI state.
 """
 
-import unittest
-from unittest.mock import MagicMock, patch
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
+import unittest
+from unittest.mock import MagicMock, patch
 
-from agent.network_repairs_orchestrator import RepairProposal
+from agent.network_repairs_orchestrator import NetworkRepairsOrchestrator, RepairProposal
 from agent.safety import SafetyEngine
 from agent.tool_metadata import RiskLevel, ToolDefinition
 from agent.tool_registry import ToolRegistry, create_default_registry
@@ -43,6 +44,7 @@ class TestAuthorizationSecurity(unittest.TestCase):
     def setUp(self):
         self.registry = create_default_registry()
         self.safety = SafetyEngine(registry=self.registry)
+        self.orchestrator = NetworkRepairsOrchestrator(safety_engine=self.safety, registry=self.registry)
         self.autopilot = AutopilotEngine(registry=self.registry, safety_engine=self.safety)
 
     def test_all_ten_medium_tools_require_authorization(self):
@@ -147,6 +149,165 @@ class TestAuthorizationSecurity(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             self.autopilot.validate_and_build_plan(raw_plan, session_id="sess_dup_repair")
         self.assertIn("duplicate repair", str(ctx.exception).lower())
+
+    def test_safety_engine_evaluate_default_unconfirmed_fails_closed(self):
+        """Default user_confirmed=False must fail closed on MEDIUM tools."""
+        decision = self.safety.evaluate("flush_dns_cache", {})
+        self.assertFalse(decision.allowed)
+        self.assertTrue(decision.requires_confirmation)
+
+        # Invalid/non-boolean authorization values must also fail closed
+        for invalid_val in [None, "true", "True", 1, [], {}]:
+            dec = self.safety.evaluate("flush_dns_cache", {}, user_confirmed=invalid_val)
+            self.assertFalse(dec.allowed, f"user_confirmed={invalid_val} erroneously allowed execution")
+            self.assertTrue(dec.requires_confirmation)
+
+    def test_safety_engine_execute_default_unconfirmed_fails_closed(self):
+        """execute() without explicit user_confirmed=True fails closed."""
+        res = self.safety.execute("flush_dns_cache", {})
+        self.assertFalse(res["success"])
+        self.assertEqual(res["error"]["code"], "CONFIRMATION_REQUIRED")
+
+        res_none = self.safety.execute("flush_dns_cache", {}, user_confirmed=None)
+        self.assertFalse(res_none["success"])
+
+    def test_missing_empty_whitespace_token_fails_closed(self):
+        """Orchestrator rejects missing, None, empty, and whitespace-only confirmation tokens."""
+        proposal = RepairProposal(tool_name="flush_dns_cache", arguments={})
+        for bad_token in [None, "", "   ", "\t\r\n"]:
+            with self.subTest(bad_token=bad_token):
+                res = self.orchestrator.execute_repair_with_verification(
+                    proposal=proposal,
+                    user_confirmed=True,
+                    confirmation_token=bad_token,
+                )
+                self.assertFalse(res.repair_success)
+                self.assertEqual(res.verification_status, "blocked")
+                self.assertIn("Mandatory confirmation token missing or empty", res.explanation)
+
+    def test_session_id_mutation_invalidates_token(self):
+        """Tokens bound to Session A are rejected when submitted under Session B."""
+        proposal = RepairProposal(tool_name="flush_dns_cache", arguments={})
+        token_a = proposal.generate_confirmation_token(session_id="session_A")
+        res = self.orchestrator.execute_repair_with_verification(
+            proposal=proposal,
+            session_id="session_B",
+            user_confirmed=True,
+            confirmation_token=token_a,
+        )
+        self.assertFalse(res.repair_success)
+        self.assertEqual(res.verification_status, "blocked")
+        self.assertIn("Confirmation token does not match the proposal arguments", res.explanation)
+
+    def test_sequential_token_replay_blocked(self):
+        """Replaying a previously consumed token must be blocked atomically."""
+        proposal = RepairProposal(tool_name="flush_dns_cache", arguments={})
+        token = proposal.generate_confirmation_token(session_id="sess_seq_replay")
+        tool = self.registry.get("flush_dns_cache")
+        original_handler = tool.handler
+        try:
+            tool.handler = lambda: {"success": True, "flushed": True}
+
+            # First execution succeeds
+            res1 = self.orchestrator.execute_repair_with_verification(
+                proposal=proposal,
+                session_id="sess_seq_replay",
+                user_confirmed=True,
+                confirmation_token=token,
+            )
+            self.assertTrue(res1.repair_success)
+
+            # Replaying the exact same token fails closed
+            res2 = self.orchestrator.execute_repair_with_verification(
+                proposal=proposal,
+                session_id="sess_seq_replay",
+                user_confirmed=True,
+                confirmation_token=token,
+            )
+            self.assertFalse(res2.repair_success)
+            self.assertEqual(res2.verification_status, "blocked")
+            self.assertIn("already been consumed", res2.explanation.lower())
+        finally:
+            tool.handler = original_handler
+
+    def test_concurrent_token_replay_thread_safety(self):
+        """10 concurrent threads submitting the exact same token must result in exactly 1 execution."""
+        proposal = RepairProposal(tool_name="flush_dns_cache", arguments={})
+        token = proposal.generate_confirmation_token(session_id="sess_concurrent")
+        tool = self.registry.get("flush_dns_cache")
+        original_handler = tool.handler
+        try:
+            tool.handler = lambda: {"success": True, "flushed": True}
+
+            def run_attempt():
+                return self.orchestrator.execute_repair_with_verification(
+                    proposal=proposal,
+                    session_id="sess_concurrent",
+                    user_confirmed=True,
+                    confirmation_token=token,
+                )
+
+            with ThreadPoolExecutor(max_workers=10) as executor:
+                futures = [executor.submit(run_attempt) for _ in range(10)]
+                results = [f.result() for f in futures]
+
+            successes = [r for r in results if r.repair_success is True]
+            blocked = [r for r in results if r.verification_status == "blocked"]
+
+            self.assertEqual(len(successes), 1, "Exactly one thread must execute successfully")
+            self.assertEqual(len(blocked), 9, "All 9 concurrent replay attempts must be blocked")
+            for b in blocked:
+                self.assertIn("already been consumed", b.explanation.lower())
+        finally:
+            tool.handler = original_handler
+
+    def test_token_consumed_even_on_handler_failure(self):
+        """If a tool handler fails or raises an error, the token remains consumed and cannot be reused."""
+        proposal = RepairProposal(tool_name="flush_dns_cache", arguments={})
+        token = proposal.generate_confirmation_token(session_id="sess_handler_fail")
+        tool = self.registry.get("flush_dns_cache")
+        original_handler = tool.handler
+        try:
+            tool.handler = lambda: (_ for _ in ()).throw(RuntimeError("Underlying adapter driver failed"))
+
+            # First invocation fails inside handler
+            res1 = self.orchestrator.execute_repair_with_verification(
+                proposal=proposal,
+                session_id="sess_handler_fail",
+                user_confirmed=True,
+                confirmation_token=token,
+            )
+            self.assertFalse(res1.repair_success)
+
+            # Token must remain marked as consumed
+            self.assertTrue(self.safety.is_token_consumed(token))
+
+            # Replaying the token is blocked immediately
+            res2 = self.orchestrator.execute_repair_with_verification(
+                proposal=proposal,
+                session_id="sess_handler_fail",
+                user_confirmed=True,
+                confirmation_token=token,
+            )
+            self.assertFalse(res2.repair_success)
+            self.assertEqual(res2.verification_status, "blocked")
+            self.assertIn("already been consumed", res2.explanation.lower())
+        finally:
+            tool.handler = original_handler
+
+    def test_user_confirmed_false_blocks_even_with_valid_token(self):
+        """user_confirmed=False must fail closed even when a valid token is provided."""
+        proposal = RepairProposal(tool_name="flush_dns_cache", arguments={})
+        token = proposal.generate_confirmation_token(session_id="sess_gate_test")
+        res = self.orchestrator.execute_repair_with_verification(
+            proposal=proposal,
+            session_id="sess_gate_test",
+            user_confirmed=False,
+            confirmation_token=token,
+        )
+        self.assertFalse(res.repair_success)
+        self.assertEqual(res.verification_status, "blocked")
+        self.assertIn("Explicit user confirmation required", res.explanation)
 
 
 if __name__ == "__main__":

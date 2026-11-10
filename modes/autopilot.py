@@ -1281,12 +1281,13 @@ class AutopilotEngine:
                 )
 
             if tool_name == "clean_user_temp_cache":
-                token = f"tok_{session_id}_{tool_name}"
+                token = f"tok_{session_id}_{tool_name}_{time.time()}"
                 raw_out = self.safety_engine.execute(
                     tool_name=tool_name,
                     arguments=step.arguments,
                     session_id=session_id,
                     user_confirmed=True,
+                    confirmation_token=token,
                 )
                 v_out = get_temp_storage_info()
                 dur_ms = int((time.time() - t_start) * 1000)
@@ -1304,12 +1305,13 @@ class AutopilotEngine:
                 )
 
             if tool_name in ["restart_bluetooth_service", "restart_service", "start_service", "stop_service"]:
-                token = f"tok_{session_id}_{tool_name}"
+                token = f"tok_{session_id}_{tool_name}_{time.time()}"
                 raw_out = self.safety_engine.execute(
                     tool_name=tool_name,
                     arguments=step.arguments,
                     session_id=session_id,
                     user_confirmed=True,
+                    confirmation_token=token,
                 )
                 svc_name = step.arguments.get("service_name", "bthserv" if "bluetooth" in tool_name else "wuauserv")
                 v_out = get_service_status(service_name=svc_name)
@@ -1330,11 +1332,15 @@ class AutopilotEngine:
                 )
 
             # Generic fallback through SafetyEngine
+            tool_def = self.registry.get(tool_name)
+            is_medium = (tool_def and tool_def.risk.value == "MEDIUM")
+            gen_token = f"tok_{session_id}_{tool_name}_{time.time()}" if is_medium else None
             raw_out = self.safety_engine.execute(
                 tool_name=tool_name,
                 arguments=step.arguments,
                 session_id=session_id,
                 user_confirmed=True,
+                confirmation_token=gen_token,
             )
             dur_ms = int((time.time() - t_start) * 1000)
             return AutopilotStepResult(

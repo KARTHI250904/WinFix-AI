@@ -267,10 +267,12 @@ class TestStorageOrchestratorAndVerificationLifecycle(unittest.TestCase):
             "data": {"total_temp_bytes": 1024, "total_temp_files": 1},
         }
 
+        token = proposal.generate_confirmation_token("sess_storage_verified")
         result = self.orchestrator.execute_repair_with_verification(
             proposal=proposal,
             session_id="sess_storage_verified",
             user_confirmed=True,
+            confirmation_token=token,
         )
 
         self.assertTrue(result.repair_success)

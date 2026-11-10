@@ -8,8 +8,9 @@ tool schemas, prevents command injection, and audits all tool executions.
 from dataclasses import dataclass
 import json
 import logging
+import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 from agent.tool_metadata import RiskLevel, ToolDefinition
 from agent.tool_registry import ToolRegistry, default_tool_registry
@@ -40,6 +41,13 @@ class SafetyEngine:
     ) -> None:
         self.registry = registry or default_tool_registry
         self.execution_repo = execution_repo
+        self._lock = threading.Lock()
+        self._consumed_tokens: Set[str] = set()
+
+    def is_token_consumed(self, token: str) -> bool:
+        """Check whether a confirmation token has already been consumed."""
+        with self._lock:
+            return token in self._consumed_tokens
 
     def evaluate(
         self,
@@ -86,7 +94,8 @@ class SafetyEngine:
             )
 
         if tool.risk == RiskLevel.MEDIUM:
-            if user_confirmed:
+            # Strict boolean True check: missing, None, false, or non-boolean must fail closed
+            if user_confirmed is True:
                 return SafetyDecision(
                     allowed=True,
                     requires_confirmation=False,
@@ -151,6 +160,7 @@ class SafetyEngine:
         arguments: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
         user_confirmed: bool = False,
+        confirmation_token: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Validate, authorize, execute the registered tool handler, and audit log the outcome."""
         start_time = time.time()
@@ -197,6 +207,61 @@ class SafetyEngine:
                     "reason": decision.reason,
                 },
             }
+
+        # Enforce single-use atomic anti-replay if confirmation_token is provided
+        if confirmation_token is not None:
+            if not isinstance(confirmation_token, str) or not confirmation_token.strip():
+                duration_ms = int((time.time() - start_time) * 1000)
+                reason = "Security validation failed: Mandatory confirmation token missing or empty."
+                logger.warning("Tool execution blocked for %s: invalid confirmation token", tool_name)
+                self._log_audit(
+                    session_id=session_id,
+                    tool_name=tool_name,
+                    risk_level=risk_str,
+                    requires_admin=req_admin,
+                    success=False,
+                    duration_ms=duration_ms,
+                    error_message=reason,
+                    result_json=None,
+                )
+                return {
+                    "success": False,
+                    "tool": tool_name,
+                    "domain": domain,
+                    "risk": risk_str,
+                    "data": None,
+                    "error": {"code": "TOKEN_REQUIRED", "message": reason},
+                    "duration_ms": duration_ms,
+                    "safety": {"allowed": False, "reason": reason},
+                }
+
+            with self._lock:
+                if confirmation_token in self._consumed_tokens:
+                    duration_ms = int((time.time() - start_time) * 1000)
+                    reason = "Security validation failed: Confirmation token has already been consumed."
+                    logger.warning("Token replay attempt blocked for %s: %s", tool_name, confirmation_token)
+                    self._log_audit(
+                        session_id=session_id,
+                        tool_name=tool_name,
+                        risk_level=risk_str,
+                        requires_admin=req_admin,
+                        success=False,
+                        duration_ms=duration_ms,
+                        error_message=reason,
+                        result_json=None,
+                    )
+                    return {
+                        "success": False,
+                        "tool": tool_name,
+                        "domain": domain,
+                        "risk": risk_str,
+                        "data": None,
+                        "error": {"code": "TOKEN_ALREADY_USED", "message": reason},
+                        "duration_ms": duration_ms,
+                        "safety": {"allowed": False, "reason": reason},
+                    }
+                # Atomically mark token as consumed prior to tool handler dispatch
+                self._consumed_tokens.add(confirmation_token)
 
         # Handler existence check (Fail closed)
         if not tool or tool.handler is None or not callable(tool.handler):

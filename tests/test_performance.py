@@ -351,10 +351,12 @@ class TestPerformanceOrchestratorAndVerificationLifecycle(unittest.TestCase):
             "data": {"total_temp_bytes": 0, "total_temp_files": 0},
         }
 
+        token = proposal.generate_confirmation_token("sess_perf_01")
         result = self.orchestrator.execute_repair_with_verification(
             proposal=proposal,
             session_id="sess_perf_01",
             user_confirmed=True,
+            confirmation_token=token,
         )
 
         self.assertTrue(result.repair_success)
@@ -400,10 +402,12 @@ class TestPerformanceOrchestratorAndVerificationLifecycle(unittest.TestCase):
 
         proc_tool.handler = mock_proc_details
 
+        token = proposal.generate_confirmation_token("sess_proc_01")
         result = self.orchestrator.execute_repair_with_verification(
             proposal=proposal,
             session_id="sess_proc_01",
             user_confirmed=True,
+            confirmation_token=token,
         )
 
         self.assertTrue(result.repair_success)
