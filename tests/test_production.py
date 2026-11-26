@@ -107,8 +107,10 @@ class TestAppPathsAndDirectories(unittest.TestCase):
     def test_path_traversal_prevention(self):
         safe_child = self.paths.data_dir / "reports" / "summary.json"
         unsafe_traversal = self.paths.root_dir / ".." / ".." / "Windows" / "System32"
+        sibling_collision = self.paths.root_dir.parent / f"{self.paths.root_dir.name}_malicious" / "leak.txt"
         self.assertTrue(is_safe_app_path(safe_child, self.paths.root_dir))
         self.assertFalse(is_safe_app_path(unsafe_traversal, self.paths.root_dir))
+        self.assertFalse(is_safe_app_path(sibling_collision, self.paths.root_dir))
 
 
 class TestFirstRunAndSetup(unittest.TestCase):
@@ -174,6 +176,15 @@ class TestProductionLoggingAndSanitization(unittest.TestCase):
         sanitized = sanitize_log_text(raw)
         self.assertNotIn("TestUser", sanitized)
         self.assertIn("c:/Users/<User>\\Documents\\file.txt", sanitized)
+
+    def test_sanitize_multiple_user_paths(self):
+        """Verify multiple user paths in a single log line are both masked independently (WF-SEC-02)."""
+        raw = "Copying from C:\\Users\\Alice\\file.txt to C:/Users/Bob/notes.txt"
+        sanitized = sanitize_log_text(raw)
+        self.assertNotIn("Alice", sanitized)
+        self.assertNotIn("Bob", sanitized)
+        self.assertIn("C:\\Users\\<User>\\file.txt", sanitized)
+        self.assertIn("C:/Users/<User>/notes.txt", sanitized)
 
     def test_logging_setup_idempotency(self):
         """Calling setup_production_logging repeatedly must not duplicate handlers."""

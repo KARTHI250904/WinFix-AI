@@ -75,6 +75,7 @@ class AutopilotStep:
     verification_required: bool = False
     depends_on: Optional[int] = None
     preconditions: List[AutopilotPrecondition] = field(default_factory=list)
+    confirmation_token: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert step to serializable dictionary."""
@@ -91,6 +92,7 @@ class AutopilotStep:
             "verification_required": self.verification_required,
             "depends_on": self.depends_on,
             "preconditions": [p.to_dict() for p in self.preconditions],
+            "confirmation_token": self.confirmation_token,
         }
 
 

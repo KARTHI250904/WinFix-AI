@@ -117,6 +117,78 @@ class TestTutorPrivacyAndSanitization(unittest.TestCase):
         self.assertIn(r"C:\Windows\System32\ntdll.dll", sanitized)
         self.assertIn(r"C:\Program Files\App\app.exe", sanitized)
 
+    def test_sanitize_user_paths_forward_slash(self):
+        """Verify forward-slash user paths mask personal usernames (WF-SEC-02)."""
+        raw = "Crash log at C:/Users/Alice/AppData/Local/Temp/app.log"
+        sanitized = sanitize_tutor_text(raw)
+        self.assertNotIn("Alice", sanitized)
+        self.assertIn("C:/Users/<User>/AppData/Local/Temp/app.log", sanitized)
+
+    def test_sanitize_user_paths_mixed_slashes(self):
+        """Verify mixed-slash user paths mask personal usernames (WF-SEC-02)."""
+        raw = r"Config at C:/Users/Bob\AppData\Local/settings.json"
+        sanitized = sanitize_tutor_text(raw)
+        self.assertNotIn("Bob", sanitized)
+        self.assertIn(r"C:/Users/<User>\AppData\Local/settings.json", sanitized)
+
+    def test_sanitize_user_paths_multiple_in_single_text(self):
+        """Verify multiple user paths in the same string are all masked independently (WF-SEC-02)."""
+        raw = r"Source C:\Users\Alice\file.txt and target C:/Users/Bob/notes.txt"
+        sanitized = sanitize_tutor_text(raw)
+        self.assertNotIn("Alice", sanitized)
+        self.assertNotIn("Bob", sanitized)
+        self.assertIn(r"C:\Users\<User>\file.txt", sanitized)
+        self.assertIn("C:/Users/<User>/notes.txt", sanitized)
+
+    def test_sanitize_user_paths_with_spaces_in_username(self):
+        """Verify usernames containing spaces are masked properly (WF-SEC-02)."""
+        raw_back = r"Profile at C:\Users\John Smith\Documents\report.docx"
+        sanitized_back = sanitize_tutor_text(raw_back)
+        self.assertNotIn("John Smith", sanitized_back)
+        self.assertIn(r"C:\Users\<User>\Documents\report.docx", sanitized_back)
+
+        raw_fwd = "Profile at C:/Users/Jane Doe/Documents/report.docx"
+        sanitized_fwd = sanitize_tutor_text(raw_fwd)
+        self.assertNotIn("Jane Doe", sanitized_fwd)
+        self.assertIn("C:/Users/<User>/Documents/report.docx", sanitized_fwd)
+
+    def test_sanitize_user_paths_already_masked_idempotent(self):
+        """Verify re-sanitizing an already-masked path is idempotent (WF-SEC-02)."""
+        already_masked = r"C:\Users\<User>\AppData\Local\Temp"
+        self.assertEqual(sanitize_tutor_text(already_masked), already_masked)
+        already_masked_fwd = "C:/Users/<User>/AppData/Local/Temp"
+        self.assertEqual(sanitize_tutor_text(already_masked_fwd), already_masked_fwd)
+
+    def test_sanitize_user_paths_at_end_of_sentence(self):
+        """Verify paths terminating at sentence punctuation or whitespace are masked (WF-SEC-02)."""
+        raw = r"User profile is C:\Users\Alice."
+        sanitized = sanitize_tutor_text(raw)
+        self.assertNotIn("Alice", sanitized)
+        self.assertEqual(sanitized, r"User profile is C:\Users\<User>.")
+
+    def test_tutor_prompt_privacy_masking_integration(self):
+        """Verify build_tutor_prompt sanitizes diagnostic evidence containing forward and backward user paths (WF-SEC-02)."""
+        diag_evidence = {
+            "error_file": "C:/Users/SecretUser/AppData/Local/crash.dmp",
+            "log_path": r"C:\Users\AdminUser\Desktop\debug.log",
+        }
+        sanitized_diag = sanitize_tutor_payload(diag_evidence)
+        prompt = build_tutor_prompt(
+            user_question=sanitize_tutor_text("Why did C:/Users/SecretUser/app fail?"),
+            diagnostic_evidence=sanitized_diag,
+            repair_result=None,
+            verification_status=None,
+            allowed_tools=["get_recent_application_crashes"],
+        )
+        self.assertNotIn("SecretUser", prompt)
+        self.assertNotIn("AdminUser", prompt)
+        self.assertIn("C:/Users/<User>/AppData/Local/crash.dmp", prompt)
+        # Note: json.dumps escapes backslashes in diagnostic evidence
+        self.assertTrue(
+            r"C:\Users\<User>\Desktop\debug.log" in prompt
+            or r"C:\\Users\\<User>\\Desktop\\debug.log" in prompt
+        )
+
 
 class TestTutorContext(unittest.TestCase):
     """Test suite for TutorContext and bounded history management."""

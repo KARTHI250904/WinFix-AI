@@ -51,6 +51,26 @@ def print_health_report(report) -> None:
     print("=" * 60 + "\n")
 
 
+ALLOWED_LOOPBACK_HOSTS: set[str] = {"127.0.0.1", "localhost"}
+
+
+def validate_host_address(host: str) -> tuple[bool, str]:
+    """Validate that the UI server host is strictly bound to local loopback.
+
+    Enforces security invariant: WinFix AI must never bind to external or LAN interfaces
+    (such as 0.0.0.0 or LAN IP) to prevent unauthenticated network exposure.
+    """
+    if not host or not isinstance(host, str):
+        return False, "Host address cannot be empty or invalid."
+    clean_host = host.strip().lower()
+    if clean_host not in ALLOWED_LOOPBACK_HOSTS:
+        return False, (
+            f"Security Violation: Non-loopback host '{host}' is strictly prohibited. "
+            f"WinFix AI must bind to loopback (127.0.0.1 or localhost) to prevent unauthorized network exposure."
+        )
+    return True, ""
+
+
 def launch_streamlit_app(
     port: int = 8501,
     host: str = "127.0.0.1",
@@ -58,6 +78,12 @@ def launch_streamlit_app(
     offline: bool = True,
 ) -> int:
     """Launch Streamlit web UI in offline mode."""
+    # Enforce strict loopback validation
+    is_valid_host, host_err = validate_host_address(host)
+    if not is_valid_host:
+        print(f"\n[SECURITY ERROR] {host_err}\n")
+        return 1
+
     app_py = Path(__file__).parent / "app.py"
     if not app_py.exists():
         print(f"Error: Application file not found: {app_py}")
@@ -106,13 +132,23 @@ def main() -> int:
     parser.add_argument("--check-only", action="store_true", help="Run health check and exit without launching UI")
     parser.add_argument("--setup-only", action="store_true", help="Run first-time initialization and exit")
     parser.add_argument("--migrate", action="store_true", help="Run transactional schema migration and exit")
-    parser.add_argument("--host", default="127.0.0.1", help="Host address to bind the UI server to (default: 127.0.0.1 for Localhost)")
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host address to bind the UI server to (strictly limited to 127.0.0.1 or localhost)",
+    )
     parser.add_argument("--port", type=int, default=8501, help="Port to run the UI server on (default: 8501)")
     parser.add_argument("--headless", action="store_true", help="Run Streamlit in headless mode")
     parser.add_argument("--offline", action="store_true", default=True, help="Enforce offline operation (default: True)")
     parser.add_argument("--online", dest="offline", action="store_false", help="Allow online telemetry and model lookups")
 
     args = parser.parse_args()
+
+    # Enforce strict loopback validation on host CLI argument
+    is_valid_host, host_err = validate_host_address(args.host)
+    if not is_valid_host:
+        print(f"\n[CRITICAL SECURITY ERROR] {host_err}\n")
+        return 1
 
     # Enforce IPv4 loopback for Ollama to prevent offline Windows DNS resolution issues
     if "localhost" in os.environ.get("OLLAMA_BASE_URL", ""):

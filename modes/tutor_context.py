@@ -12,7 +12,10 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # Patterns for sensitive data matching
-USER_PATH_PATTERN = re.compile(r"([a-zA-Z]:\\Users\\)[^\\]+(\\.*)?", re.IGNORECASE)
+USER_PATH_PATTERN = re.compile(
+    r"([a-zA-Z]:[/\\\\]+Users[/\\\\]+)(?:<User>|([^\\/:*?\"<>|\r\n\t]+?)(?=[/\\\\])|([^\\/:*?\"<>|\r\n\t\s,;!?\"'<>()[\]{}.]+)(?=\.(?:\s|$)|[\s,;!?\"'<>()[\]{}]|$))",
+    re.IGNORECASE,
+)
 EMAIL_PATTERN = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b")
 API_KEY_PATTERN = re.compile(r"\b(?:api_key|token|password|secret|bearer)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{8,}['\"]?", re.IGNORECASE)
 
@@ -24,8 +27,8 @@ def sanitize_tutor_text(text: Optional[str]) -> str:
 
     sanitized = text
 
-    # 1. Mask User Profiles in Windows paths
-    sanitized = USER_PATH_PATTERN.sub(r"\1<User>\2", sanitized)
+    # 1. Mask User Profiles in Windows paths (supports both \ and /, mixed slashes, spaces in username, and multiple paths)
+    sanitized = USER_PATH_PATTERN.sub(r"\1<User>", sanitized)
 
     # 2. Mask Email addresses
     sanitized = EMAIL_PATTERN.sub("<email-masked>", sanitized)

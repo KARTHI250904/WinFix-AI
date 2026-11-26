@@ -15,13 +15,22 @@ import config
 from agent.bluetooth_repairs_orchestrator import BluetoothRepairsOrchestrator
 from agent.defender_repairs_orchestrator import DefenderRepairProposal, DefenderRepairsOrchestrator
 from agent.network_repairs_orchestrator import (
+    NetworkRepairsOrchestrator,
     RepairProposal,
     default_network_repairs_orchestrator,
 )
-from agent.performance_repairs_orchestrator import default_performance_repairs_orchestrator
+from agent.performance_repairs_orchestrator import (
+    PerformanceRepairProposal,
+    PerformanceRepairsOrchestrator,
+    default_performance_repairs_orchestrator,
+)
 from agent.safety import SafetyEngine
 from agent.service_repairs_orchestrator import ServiceRepairsOrchestrator
-from agent.storage_repairs_orchestrator import default_storage_repairs_orchestrator
+from agent.storage_repairs_orchestrator import (
+    StorageRepairProposal,
+    StorageRepairsOrchestrator,
+    default_storage_repairs_orchestrator,
+)
 from agent.tool_metadata import RiskLevel, ToolDefinition
 from agent.tool_registry import ToolRegistry, default_tool_registry
 from agent.windows_update_repairs_orchestrator import (
@@ -177,6 +186,9 @@ class AutopilotEngine:
         self.db = db or db_manager
         self.tutor = tutor or default_personal_tutor
         self.execution_repo = ToolExecutionRepository(self.db) if self.db else None
+        self.network_orchestrator = NetworkRepairsOrchestrator(
+            safety_engine=self.safety_engine, registry=self.registry, db_mgr=self.db
+        )
         self.windows_update_orchestrator = WindowsUpdateRepairsOrchestrator(
             safety_engine=self.safety_engine, registry=self.registry, db_mgr=self.db
         )
@@ -189,6 +201,24 @@ class AutopilotEngine:
         self.service_orchestrator = ServiceRepairsOrchestrator(
             safety_engine=self.safety_engine, registry=self.registry, db_mgr=self.db
         )
+        self.storage_orchestrator = default_storage_repairs_orchestrator or StorageRepairsOrchestrator(
+            safety_engine=self.safety_engine, registry=self.registry, db_mgr=self.db
+        )
+        self.performance_orchestrator = default_performance_repairs_orchestrator or PerformanceRepairsOrchestrator(
+            safety_engine=self.safety_engine, registry=self.registry, db_mgr=self.db
+        )
+
+    def issue_step_confirmation_token(self, step: AutopilotStep, session_id: Optional[str] = None) -> str:
+        """Issue an authoritative, cryptographically bound confirmation token for a MEDIUM repair step.
+
+        Binds strictly to tool_name, arguments, and session_id using SHA-256 matching the project's
+        authoritative confirmation-token design across domain orchestrators.
+        """
+        tool = self.registry.get(step.tool_name)
+        if not tool or tool.risk != RiskLevel.MEDIUM:
+            raise ValueError(f"Confirmation tokens are only valid for registered MEDIUM-risk repair tools, not '{step.tool_name}'.")
+        payload = f"{step.tool_name}:{json.dumps(step.arguments or {}, sort_keys=True)}:{session_id or ''}"
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def plan(
         self,
@@ -968,6 +998,7 @@ class AutopilotEngine:
                 verification_required=(not tool.read_only),
                 depends_on=s.get("depends_on"),
                 preconditions=val_preconds,
+                confirmation_token=s.get("confirmation_token"),
             )
             validated_steps.append(step_obj)
 
@@ -988,7 +1019,12 @@ class AutopilotEngine:
             is_executed=False,
         )
 
-    def authorize_plan(self, plan: AutopilotPlan, user_confirmed_hash: str) -> bool:
+    def authorize_plan(
+        self,
+        plan: AutopilotPlan,
+        user_confirmed_hash: str,
+        step_confirmation_tokens: Optional[Dict[int, str]] = None,
+    ) -> bool:
         """Authorize an Autopilot plan with exact plan-hash binding (one-time use)."""
         if plan.is_executed:
             logger.warning("Attempted to authorize an already executed plan: %s", plan.plan_id)
@@ -1005,6 +1041,17 @@ class AutopilotEngine:
         plan.is_authorized = True
         plan.status = AutopilotStatus.AUTHORIZED
 
+        # Authorize and bind confirmation tokens for all MEDIUM repair steps in the plan
+        for step in plan.steps:
+            tool = self.registry.get(step.tool_name)
+            is_medium = (tool and tool.risk == RiskLevel.MEDIUM) or step.risk_level == "MEDIUM" or step.requires_confirmation
+            if is_medium:
+                if step_confirmation_tokens and step.sequence in step_confirmation_tokens:
+                    step.confirmation_token = step_confirmation_tokens[step.sequence]
+                elif not step.confirmation_token:
+                    # Issue authoritative, cryptographically bound token for this confirmed step
+                    step.confirmation_token = self.issue_step_confirmation_token(step, plan.session_id)
+
         self._log_audit(
             session_id=plan.session_id,
             event_type="AUTOPILOT_AUTHORIZED",
@@ -1017,6 +1064,7 @@ class AutopilotEngine:
         plan: AutopilotPlan,
         user_confirmed_hash: str,
         cancellation_check: Optional[Callable[[], bool]] = None,
+        step_confirmation_tokens: Optional[Dict[int, str]] = None,
     ) -> AutopilotResult:
         """Execute approved Autopilot plan steps sequentially with verification and stop-on-failure."""
         start_time = time.time()
@@ -1036,6 +1084,12 @@ class AutopilotEngine:
             return self._build_aborted_result(
                 plan, AutopilotStatus.BLOCKED, "Plan hash integrity check failed upon execution.", start_time
             )
+
+        # Apply any explicit caller-supplied step confirmation tokens
+        if step_confirmation_tokens:
+            for step in plan.steps:
+                if step.sequence in step_confirmation_tokens:
+                    step.confirmation_token = step_confirmation_tokens[step.sequence]
 
         # Mark executed immediately to prevent replay
         plan.is_executed = True
@@ -1109,13 +1163,16 @@ class AutopilotEngine:
             step_results[step.sequence] = step_res
 
             # Evaluate Step Result
-            if step_res.status in ["FAILED", "ERROR"]:
-                final_status = AutopilotStatus.FAILED if len(step_results) == 1 else AutopilotStatus.PARTIAL
+            if step_res.status in ["FAILED", "ERROR", "BLOCKED"]:
+                if step_res.status == "BLOCKED":
+                    final_status = AutopilotStatus.BLOCKED
+                else:
+                    final_status = AutopilotStatus.FAILED if len(step_results) == 1 else AutopilotStatus.PARTIAL
                 failed_seq = step.sequence
                 stopped_reason = f"Step {step.sequence} ('{step.tool_name}') failed: {step_res.explanation}"
                 self._log_audit(
                     session_id=plan.session_id,
-                    event_type="AUTOPILOT_STEP_FAILED",
+                    event_type="AUTOPILOT_STEP_BLOCKED" if step_res.status == "BLOCKED" else "AUTOPILOT_STEP_FAILED",
                     details={"plan_id": plan.plan_id, "step_sequence": step.sequence, "tool_name": step.tool_name},
                 )
                 break
@@ -1179,12 +1236,17 @@ class AutopilotEngine:
         )
 
     def _execute_single_step(self, step: AutopilotStep, session_id: str) -> AutopilotStepResult:
-        """Execute a single Autopilot step through ToolRegistry and domain repair orchestrators."""
+        """Execute a single Autopilot step through ToolRegistry and domain repair orchestrators.
+
+        Strictly enforces that MEDIUM-risk repair tools require a valid, non-empty confirmation token
+        bound to tool name, arguments, and session. Never synthesizes or manufactures ad-hoc tokens.
+        """
         t_start = time.time()
         tool_name = step.tool_name
+        tool_def = self.registry.get(tool_name)
 
         # Route SAFE diagnostic tools
-        if step.risk_level == "SAFE":
+        if step.risk_level == "SAFE" and (not tool_def or tool_def.risk == RiskLevel.SAFE):
             raw_out = self.safety_engine.execute(
                 tool_name=tool_name,
                 arguments=step.arguments,
@@ -1203,32 +1265,56 @@ class AutopilotEngine:
                 explanation=raw_out.get("error", "Diagnostic step completed successfully.") if not success else "Diagnostic step completed.",
             )
 
-        # Route MEDIUM repair tools through domain orchestrators
-        try:
-            if tool_name == "flush_dns_cache":
-                proposal = RepairProposal(
-                    tool_name="flush_dns_cache",
-                    arguments=step.arguments or {},
-                    reason="Flushing DNS resolver cache",
-                    expected_effect="Clears resolver cache",
-                    risk="MEDIUM",
-                    requires_admin=False,
-                    verification_tool="check_dns_resolution",
+        # MEDIUM repair operations: Mandatory confirmation token validation
+        is_medium = (tool_def and tool_def.risk == RiskLevel.MEDIUM) or step.risk_level == "MEDIUM" or step.requires_confirmation
+        if is_medium:
+            token = step.confirmation_token
+            if not token or not isinstance(token, str) or not token.strip():
+                duration_ms = int((time.time() - t_start) * 1000)
+                reason = f"Security validation failed: Mandatory confirmation token missing or empty for MEDIUM-risk repair tool '{tool_name}'."
+                logger.warning("Autopilot blocked execution of %s: missing confirmation token", tool_name)
+                return AutopilotStepResult(
+                    step_id=step.step_id,
+                    sequence=step.sequence,
+                    tool_name=tool_name,
+                    status="BLOCKED",
+                    output={"success": False, "error": {"code": "TOKEN_REQUIRED", "message": reason}},
+                    verification_status="blocked",
+                    duration_ms=duration_ms,
+                    explanation=reason,
                 )
-                token = proposal.generate_confirmation_token(session_id)
-                res_obj = default_network_repairs_orchestrator.execute_repair_with_verification(
+
+        # Route MEDIUM repair tools through authoritative domain orchestrators
+        try:
+            # 1. Network repairs
+            if tool_name in ["flush_dns_cache", "renew_dhcp_lease"]:
+                proposal = RepairProposal(
+                    tool_name=tool_name,
+                    arguments=step.arguments or {},
+                    reason=step.purpose or f"Executing network repair {tool_name}",
+                    expected_effect=step.expected_result or "Network repair action",
+                    risk="MEDIUM",
+                    requires_admin=tool_def.requires_admin if tool_def else False,
+                    verification_tool="check_dns_resolution" if tool_name == "flush_dns_cache" else "get_network_adapters_diagnostics",
+                )
+                res_obj = self.network_orchestrator.execute_repair_with_verification(
                     proposal=proposal,
                     session_id=session_id,
                     user_confirmed=True,
                     confirmation_token=token,
                 )
                 dur_ms = int((time.time() - t_start) * 1000)
-                v_ok = (res_obj.verification_status == "verified")
+                if not res_obj.confirmed or res_obj.verification_status == "blocked":
+                    step_status = "BLOCKED"
+                elif res_obj.verification_status == "verified":
+                    step_status = "VERIFIED"
+                else:
+                    step_status = "VERIFICATION_FAILED"
                 return AutopilotStepResult(
                     step_id=step.step_id,
                     sequence=step.sequence,
                     tool_name=tool_name,
-                    status="VERIFIED" if v_ok else "VERIFICATION_FAILED",
+                    status=step_status,
                     output=res_obj.repair_output or {},
                     verification_status=res_obj.verification_status,
                     verification_output=res_obj.after_state,
@@ -1236,9 +1322,9 @@ class AutopilotEngine:
                     explanation=res_obj.explanation,
                 )
 
+            # 2. Windows Update repairs
             if tool_name == "restart_windows_update_service":
                 proposal = WindowsUpdateRepairProposal()
-                token = proposal.generate_confirmation_token(session_id)
                 res_obj = self.windows_update_orchestrator.execute_confirmed_restart(
                     proposal=proposal,
                     user_confirmed_token=token,
@@ -1246,11 +1332,19 @@ class AutopilotEngine:
                 )
                 dur_ms = int((time.time() - t_start) * 1000)
                 v_status = res_obj.verification_status
+                if v_status == "blocked" or not res_obj.confirmed:
+                    step_status = "BLOCKED"
+                elif v_status == "verified":
+                    step_status = "VERIFIED"
+                elif v_status == "verification_timeout":
+                    step_status = "VERIFICATION_TIMEOUT"
+                else:
+                    step_status = "VERIFICATION_FAILED"
                 return AutopilotStepResult(
                     step_id=step.step_id,
                     sequence=step.sequence,
                     tool_name=tool_name,
-                    status="VERIFIED" if v_status == "verified" else ("VERIFICATION_TIMEOUT" if v_status == "verification_timeout" else "VERIFICATION_FAILED"),
+                    status=step_status,
                     output=res_obj.repair_output or {},
                     verification_status=v_status,
                     verification_output=res_obj.after_state,
@@ -1258,9 +1352,9 @@ class AutopilotEngine:
                     explanation=res_obj.explanation,
                 )
 
+            # 3. Defender repairs
             if tool_name == "restart_defender_service":
                 proposal = DefenderRepairProposal()
-                token = proposal.generate_confirmation_token(session_id)
                 res_obj = self.defender_orchestrator.execute_confirmed_restart(
                     proposal=proposal,
                     user_confirmed_token=token,
@@ -1268,11 +1362,19 @@ class AutopilotEngine:
                 )
                 dur_ms = int((time.time() - t_start) * 1000)
                 v_status = res_obj.verification_status
+                if v_status == "blocked" or not res_obj.confirmed:
+                    step_status = "BLOCKED"
+                elif v_status == "verified":
+                    step_status = "VERIFIED"
+                elif v_status == "verification_timeout":
+                    step_status = "VERIFICATION_TIMEOUT"
+                else:
+                    step_status = "VERIFICATION_FAILED"
                 return AutopilotStepResult(
                     step_id=step.step_id,
                     sequence=step.sequence,
                     tool_name=tool_name,
-                    status="VERIFIED" if v_status == "verified" else ("VERIFICATION_TIMEOUT" if v_status == "verification_timeout" else "VERIFICATION_FAILED"),
+                    status=step_status,
                     output=res_obj.repair_output or {},
                     verification_status=v_status,
                     verification_output=res_obj.after_state,
@@ -1280,77 +1382,143 @@ class AutopilotEngine:
                     explanation=res_obj.explanation,
                 )
 
+            # 4. Storage repairs
             if tool_name == "clean_user_temp_cache":
-                token = f"tok_{session_id}_{tool_name}_{time.time()}"
-                raw_out = self.safety_engine.execute(
-                    tool_name=tool_name,
-                    arguments=step.arguments,
+                proposal = StorageRepairProposal(
+                    tool_name="clean_user_temp_cache",
+                    arguments=step.arguments or {},
+                    reason=step.purpose or "Purges temporary files from user cache.",
+                    expected_effect=step.expected_result or "Cleaned temporary files.",
+                    risk="MEDIUM",
+                    requires_admin=False,
+                    verification_tool="get_temp_storage_info",
+                )
+                res_obj = self.storage_orchestrator.execute_repair_with_verification(
+                    proposal=proposal,
                     session_id=session_id,
                     user_confirmed=True,
                     confirmation_token=token,
                 )
-                v_out = get_temp_storage_info()
                 dur_ms = int((time.time() - t_start) * 1000)
-                v_ok = raw_out.get("success", False)
+                if not res_obj.confirmed or res_obj.verification_status == "blocked":
+                    step_status = "BLOCKED"
+                elif res_obj.verification_status == "verified":
+                    step_status = "VERIFIED"
+                else:
+                    step_status = "FAILED"
                 return AutopilotStepResult(
                     step_id=step.step_id,
                     sequence=step.sequence,
                     tool_name=tool_name,
-                    status="VERIFIED" if v_ok else "FAILED",
-                    output=raw_out,
-                    verification_status="verified" if v_ok else "not_verified",
-                    verification_output=v_out,
+                    status=step_status,
+                    output=res_obj.repair_output or {},
+                    verification_status=res_obj.verification_status,
+                    verification_output=res_obj.after_state,
                     duration_ms=dur_ms,
-                    explanation="Temporary cache cleanup completed." if v_ok else "Temporary cache cleanup failed.",
+                    explanation=res_obj.explanation,
                 )
 
-            if tool_name in ["restart_bluetooth_service", "restart_service", "start_service", "stop_service"]:
-                token = f"tok_{session_id}_{tool_name}_{time.time()}"
-                raw_out = self.safety_engine.execute(
+            # 5. Bluetooth repairs
+            if tool_name == "restart_bluetooth_service":
+                res_obj = self.bluetooth_orchestrator.execute_confirmed_repair(
                     tool_name=tool_name,
-                    arguments=step.arguments,
+                    arguments=step.arguments or {},
+                    confirmation_token=token,
+                    session_id=session_id,
+                )
+                dur_ms = int((time.time() - t_start) * 1000)
+                if not res_obj.confirmed or res_obj.verification_status == "blocked":
+                    step_status = "BLOCKED"
+                elif res_obj.verification_status == "verified":
+                    step_status = "VERIFIED"
+                else:
+                    step_status = "VERIFICATION_FAILED"
+                return AutopilotStepResult(
+                    step_id=step.step_id,
+                    sequence=step.sequence,
+                    tool_name=tool_name,
+                    status=step_status,
+                    output=res_obj.repair_output or {},
+                    verification_status=res_obj.verification_status,
+                    verification_output=res_obj.after_state,
+                    duration_ms=dur_ms,
+                    explanation=res_obj.explanation,
+                )
+
+            # 6. Service repairs
+            if tool_name in ["start_service", "stop_service", "restart_service"]:
+                res_obj = self.service_orchestrator.execute_confirmed_repair(
+                    tool_name=tool_name,
+                    arguments=step.arguments or {},
+                    confirmation_token=token,
+                    session_id=session_id,
+                )
+                dur_ms = int((time.time() - t_start) * 1000)
+                if not res_obj.confirmed or res_obj.verification_status == "blocked":
+                    step_status = "BLOCKED"
+                elif res_obj.verification_status == "verified":
+                    step_status = "VERIFIED"
+                else:
+                    step_status = "VERIFICATION_FAILED"
+                return AutopilotStepResult(
+                    step_id=step.step_id,
+                    sequence=step.sequence,
+                    tool_name=tool_name,
+                    status=step_status,
+                    output=res_obj.repair_output or {},
+                    verification_status=res_obj.verification_status,
+                    verification_output=res_obj.after_state,
+                    duration_ms=dur_ms,
+                    explanation=res_obj.explanation,
+                )
+
+            # 7. Performance / process termination
+            if tool_name == "terminate_user_process":
+                proposal = PerformanceRepairProposal(
+                    tool_name=tool_name,
+                    arguments=step.arguments or {},
+                    reason=step.purpose or "Terminates unresponsive process.",
+                    expected_effect=step.expected_result or "Process terminated.",
+                    risk="MEDIUM",
+                    requires_admin=False,
+                    verification_tool="get_running_processes",
+                )
+                res_obj = self.performance_orchestrator.execute_repair_with_verification(
+                    proposal=proposal,
                     session_id=session_id,
                     user_confirmed=True,
                     confirmation_token=token,
                 )
-                svc_name = step.arguments.get("service_name", "bthserv" if "bluetooth" in tool_name else "wuauserv")
-                v_out = get_service_status(service_name=svc_name)
-                current_state = v_out.get("data", {}).get("status", "UNKNOWN")
-                expected_state = "RUNNING" if "stop" not in tool_name else "STOPPED"
-                v_ok = (current_state == expected_state)
                 dur_ms = int((time.time() - t_start) * 1000)
+                if not res_obj.confirmed or res_obj.verification_status == "blocked":
+                    step_status = "BLOCKED"
+                elif res_obj.verification_status == "verified":
+                    step_status = "VERIFIED"
+                else:
+                    step_status = "FAILED"
                 return AutopilotStepResult(
                     step_id=step.step_id,
                     sequence=step.sequence,
                     tool_name=tool_name,
-                    status="VERIFIED" if v_ok else "VERIFICATION_FAILED",
-                    output=raw_out,
-                    verification_status="verified" if v_ok else "not_verified",
-                    verification_output=v_out,
+                    status=step_status,
+                    output=res_obj.repair_output or {},
+                    verification_status=res_obj.verification_status,
+                    verification_output=res_obj.after_state,
                     duration_ms=dur_ms,
-                    explanation=f"Service {svc_name} is {current_state} (expected {expected_state}).",
+                    explanation=res_obj.explanation,
                 )
 
-            # Generic fallback through SafetyEngine
-            tool_def = self.registry.get(tool_name)
-            is_medium = (tool_def and tool_def.risk.value == "MEDIUM")
-            gen_token = f"tok_{session_id}_{tool_name}_{time.time()}" if is_medium else None
-            raw_out = self.safety_engine.execute(
-                tool_name=tool_name,
-                arguments=step.arguments,
-                session_id=session_id,
-                user_confirmed=True,
-                confirmation_token=gen_token,
-            )
+            # Generic fallback: Fail closed for any unrouted MEDIUM tool
             dur_ms = int((time.time() - t_start) * 1000)
             return AutopilotStepResult(
                 step_id=step.step_id,
                 sequence=step.sequence,
                 tool_name=tool_name,
-                status="SUCCESS" if raw_out.get("success") else "FAILED",
-                output=raw_out,
+                status="BLOCKED",
+                output={"success": False, "error": f"No authorized domain orchestrator for repair tool '{tool_name}'."},
+                verification_status="blocked",
                 duration_ms=dur_ms,
-                explanation=raw_out.get("error", "Repair executed."),
+                explanation=f"Security Policy Rejection: No authorized domain repair orchestrator registered for '{tool_name}'.",
             )
         except Exception as ex:
             dur_ms = int((time.time() - t_start) * 1000)

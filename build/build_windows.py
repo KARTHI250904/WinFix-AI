@@ -30,6 +30,7 @@ logger = logging.getLogger("winfix.BUILD")
 
 # Production Allowlist
 PRODUCTION_DIRECTORIES: List[str] = [
+    ".streamlit",
     "agent",
     "ai",
     "database",
@@ -46,6 +47,7 @@ PRODUCTION_FILES: List[str] = [
     "config.py",
     "winfix_launcher.py",
     "requirements.txt",
+    "requirements.lock",
 ]
 
 DEVELOPMENT_EXCLUSION_PATTERNS: Set[str] = {
@@ -71,22 +73,44 @@ FORBIDDEN_SECRET_PATTERNS = [
 ]
 
 
+def _force_remove(path: Path) -> None:
+    """Recursively remove a directory or file, clearing read-only attributes on Windows."""
+    if not path.exists():
+        return
+    import stat
+
+    def _on_error(func, p, exc_info):
+        try:
+            os.chmod(p, stat.S_IWRITE)
+            func(p)
+        except Exception:
+            pass
+
+    if path.is_dir():
+        try:
+            if sys.version_info >= (3, 12):
+                shutil.rmtree(path, onexc=_on_error)
+            else:
+                shutil.rmtree(path, onerror=_on_error)
+        except Exception:
+            shutil.rmtree(path, ignore_errors=True)
+    else:
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            path.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
 def clean_build_directories() -> None:
     """Purge previous build and distribution artifacts."""
     logger.info("Cleaning previous build directories...")
     for directory in [ARTIFACTS_DIR, DIST_DIR, BUILD_DIR / "dist"]:
         if directory.exists():
-            shutil.rmtree(directory, ignore_errors=True)
-            # If directory still exists due to Windows file handle locking, clear contents
+            _force_remove(directory)
             if directory.exists():
-                for item in directory.iterdir():
-                    try:
-                        if item.is_dir():
-                            shutil.rmtree(item, ignore_errors=True)
-                        else:
-                            item.unlink(missing_ok=True)
-                    except Exception:
-                        pass
+                for item in list(directory.iterdir()):
+                    _force_remove(item)
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     DIST_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -149,10 +173,14 @@ def copy_production_files(dist_root: Path) -> List[Path]:
                 ignore=shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo", ".pytest_cache"),
                 dirs_exist_ok=True,
             )
-            for p in dst_dir.rglob("*"):
-                if p.is_file():
-                    copied_files.append(p)
+    # 3. Clean up any bytecode or cache artifacts from dist
+    for pycache in list(dist_root.rglob("__pycache__")):
+        if pycache.is_dir():
+            shutil.rmtree(pycache, ignore_errors=True)
+    for pyc in list(dist_root.rglob("*.pyc")):
+        pyc.unlink(missing_ok=True)
 
+    copied_files = [p for p in dist_root.rglob("*") if p.is_file()]
     return copied_files
 
 

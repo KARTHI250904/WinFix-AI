@@ -309,6 +309,282 @@ class TestAuthorizationSecurity(unittest.TestCase):
         self.assertEqual(res.verification_status, "blocked")
         self.assertIn("Explicit user confirmation required", res.explanation)
 
+    # -------------------------------------------------------------------------
+    # WF-SEC-03: Autopilot Confirmation Token Management Regression Tests
+    # -------------------------------------------------------------------------
+
+    def test_autopilot_missing_token_blocks_medium_repair(self):
+        """Autopilot execution without a confirmation token for a MEDIUM tool must fail closed with BLOCKED."""
+        step = AutopilotStep(
+            step_id="step_no_tok",
+            sequence=1,
+            tool_name="flush_dns_cache",
+            arguments={},
+            risk_level="MEDIUM",
+            requires_confirmation=True,
+            confirmation_token=None,
+        )
+        plan = AutopilotPlan(
+            plan_id="plan_no_tok",
+            session_id="sess_no_tok",
+            goal="Flush DNS",
+            steps=[step],
+            plan_hash="hash_no_tok",
+            is_authorized=True,
+            status=AutopilotStatus.AUTHORIZED,
+        )
+        res = self.autopilot.execute_plan(plan, user_confirmed_hash="hash_no_tok")
+        self.assertEqual(res.status, AutopilotStatus.BLOCKED)
+        self.assertEqual(len(res.step_results), 1)
+        self.assertEqual(res.step_results[0].status, "BLOCKED")
+        self.assertIn("Mandatory confirmation token missing", res.step_results[0].explanation)
+
+    def test_autopilot_synthetic_token_string_rejected(self):
+        """Autopilot must reject ad-hoc synthetic strings (tok_...) rather than bypassing validation."""
+        synthetic_token = f"tok_sess_synth_flush_dns_cache_123456789.0"
+        step = AutopilotStep(
+            step_id="step_synth",
+            sequence=1,
+            tool_name="flush_dns_cache",
+            arguments={},
+            risk_level="MEDIUM",
+            requires_confirmation=True,
+            confirmation_token=synthetic_token,
+        )
+        plan = AutopilotPlan(
+            plan_id="plan_synth",
+            session_id="sess_synth",
+            goal="Flush DNS",
+            steps=[step],
+            plan_hash="hash_synth",
+            is_authorized=True,
+            status=AutopilotStatus.AUTHORIZED,
+        )
+        res = self.autopilot.execute_plan(plan, user_confirmed_hash="hash_synth")
+        self.assertEqual(res.status, AutopilotStatus.BLOCKED)
+        self.assertEqual(res.step_results[0].status, "BLOCKED")
+        self.assertIn("does not match", res.step_results[0].explanation.lower())
+
+    def test_autopilot_wrong_session_token_rejected(self):
+        """Autopilot must reject a token generated for Session A when executed under Session B."""
+        proposal = RepairProposal(tool_name="flush_dns_cache", arguments={})
+        token_sess_a = proposal.generate_confirmation_token(session_id="session_A")
+        step = AutopilotStep(
+            step_id="step_wrong_sess",
+            sequence=1,
+            tool_name="flush_dns_cache",
+            arguments={},
+            risk_level="MEDIUM",
+            requires_confirmation=True,
+            confirmation_token=token_sess_a,
+        )
+        plan = AutopilotPlan(
+            plan_id="plan_wrong_sess",
+            session_id="session_B",
+            goal="Flush DNS",
+            steps=[step],
+            plan_hash="hash_wrong_sess",
+            is_authorized=True,
+            status=AutopilotStatus.AUTHORIZED,
+        )
+        res = self.autopilot.execute_plan(plan, user_confirmed_hash="hash_wrong_sess")
+        self.assertEqual(res.status, AutopilotStatus.BLOCKED)
+        self.assertEqual(res.step_results[0].status, "BLOCKED")
+        self.assertIn("does not match", res.step_results[0].explanation.lower())
+
+    def test_autopilot_modified_arguments_token_rejected(self):
+        """Mutating arguments after token issuance causes Autopilot orchestrator validation to reject execution."""
+        token_orig = self.autopilot.issue_step_confirmation_token(
+            AutopilotStep(step_id="s1", sequence=1, tool_name="start_service", arguments={"service_name": "wuauserv"}, risk_level="MEDIUM"),
+            session_id="sess_arg_tamper",
+        )
+        # Mutate arguments to bits
+        step_tampered = AutopilotStep(
+            step_id="s1",
+            sequence=1,
+            tool_name="start_service",
+            arguments={"service_name": "bits"},
+            risk_level="MEDIUM",
+            requires_confirmation=True,
+            confirmation_token=token_orig,
+        )
+        plan = AutopilotPlan(
+            plan_id="plan_tampered",
+            session_id="sess_arg_tamper",
+            goal="Start service",
+            steps=[step_tampered],
+            plan_hash="hash_tampered",
+            is_authorized=True,
+            status=AutopilotStatus.AUTHORIZED,
+        )
+        res = self.autopilot.execute_plan(plan, user_confirmed_hash="hash_tampered")
+        self.assertEqual(res.status, AutopilotStatus.BLOCKED)
+        self.assertEqual(res.step_results[0].status, "BLOCKED")
+        self.assertIn("does not match", res.step_results[0].explanation.lower())
+
+    def test_autopilot_replayed_step_token_blocked(self):
+        """Replaying a previously consumed token in Autopilot must be blocked atomically."""
+        proposal = RepairProposal(tool_name="flush_dns_cache", arguments={})
+        token = proposal.generate_confirmation_token(session_id="sess_replay_step")
+        tool = self.registry.get("flush_dns_cache")
+        v_tool = self.registry.get("check_dns_resolution")
+        orig_handler = tool.handler
+        orig_v_handler = v_tool.handler
+        try:
+            tool.handler = lambda: {"success": True, "flushed": True}
+            v_tool.handler = lambda **kw: {"success": True, "data": {"resolved": True}}
+            step1 = AutopilotStep(
+                step_id="s1",
+                sequence=1,
+                tool_name="flush_dns_cache",
+                arguments={},
+                risk_level="MEDIUM",
+                requires_confirmation=True,
+                confirmation_token=token,
+            )
+            plan1 = AutopilotPlan(
+                plan_id="plan_rep_1",
+                session_id="sess_replay_step",
+                goal="Flush DNS 1",
+                steps=[step1],
+                plan_hash="hash_rep_1",
+                is_authorized=True,
+                status=AutopilotStatus.AUTHORIZED,
+            )
+            res1 = self.autopilot.execute_plan(plan1, user_confirmed_hash="hash_rep_1")
+            self.assertEqual(res1.status, AutopilotStatus.COMPLETED)
+
+            # Ensure the token was consumed atomically
+            self.assertTrue(self.safety.is_token_consumed(token))
+
+            # Attempt to reuse the consumed token in a new plan
+            step2 = AutopilotStep(
+                step_id="s2",
+                sequence=1,
+                tool_name="flush_dns_cache",
+                arguments={},
+                risk_level="MEDIUM",
+                requires_confirmation=True,
+                confirmation_token=token,
+            )
+            plan2 = AutopilotPlan(
+                plan_id="plan_rep_2",
+                session_id="sess_replay_step",
+                goal="Flush DNS 2",
+                steps=[step2],
+                plan_hash="hash_rep_2",
+                is_authorized=True,
+                status=AutopilotStatus.AUTHORIZED,
+            )
+            res2 = self.autopilot.execute_plan(plan2, user_confirmed_hash="hash_rep_2")
+            self.assertEqual(res2.status, AutopilotStatus.BLOCKED)
+            self.assertEqual(res2.step_results[0].status, "BLOCKED")
+            self.assertIn("already been consumed", res2.step_results[0].explanation.lower())
+        finally:
+            tool.handler = orig_handler
+            v_tool.handler = orig_v_handler
+
+    def test_autopilot_routes_storage_repair_through_orchestrator(self):
+        """clean_user_temp_cache in Autopilot must route through StorageRepairsOrchestrator."""
+        with patch.object(self.autopilot.storage_orchestrator, "execute_repair_with_verification") as mock_exec:
+            mock_res = MagicMock()
+            mock_res.confirmed = True
+            mock_res.repair_success = True
+            mock_res.verification_status = "verified"
+            mock_res.repair_output = {"cleaned": True}
+            mock_res.after_state = {"temp_files": 0}
+            mock_res.explanation = "Temp files purged."
+            mock_exec.return_value = mock_res
+
+            raw_plan = {
+                "goal": "Clean temp files",
+                "steps": [{"sequence": 1, "tool_name": "clean_user_temp_cache", "arguments": {}}],
+            }
+            plan = self.autopilot.validate_and_build_plan(raw_plan, session_id="sess_storage_route")
+            self.autopilot.authorize_plan(plan, user_confirmed_hash=plan.plan_hash)
+            res = self.autopilot.execute_plan(plan, user_confirmed_hash=plan.plan_hash)
+
+            self.assertTrue(mock_exec.called, "StorageRepairsOrchestrator was not called!")
+            call_kwargs = mock_exec.call_args[1]
+            self.assertTrue(call_kwargs.get("user_confirmed"))
+            self.assertIsNotNone(call_kwargs.get("confirmation_token"))
+            self.assertEqual(res.status, AutopilotStatus.COMPLETED)
+
+    def test_autopilot_routes_service_repair_through_orchestrator(self):
+        """restart_service in Autopilot must route through ServiceRepairsOrchestrator."""
+        with patch.object(self.autopilot.service_orchestrator, "execute_confirmed_repair") as mock_exec:
+            mock_res = MagicMock()
+            mock_res.confirmed = True
+            mock_res.repair_success = True
+            mock_res.verification_status = "verified"
+            mock_res.repair_output = {"success": True}
+            mock_res.after_state = {"status": "RUNNING"}
+            mock_res.explanation = "Service restarted."
+            mock_exec.return_value = mock_res
+
+            raw_plan = {
+                "goal": "Restart spooler",
+                "steps": [{"sequence": 1, "tool_name": "restart_service", "arguments": {"service_name": "Spooler"}}],
+            }
+            plan = self.autopilot.validate_and_build_plan(raw_plan, session_id="sess_svc_route")
+            self.autopilot.authorize_plan(plan, user_confirmed_hash=plan.plan_hash)
+            res = self.autopilot.execute_plan(plan, user_confirmed_hash=plan.plan_hash)
+
+            self.assertTrue(mock_exec.called, "ServiceRepairsOrchestrator was not called!")
+            call_kwargs = mock_exec.call_args[1]
+            self.assertIsNotNone(call_kwargs.get("confirmation_token"))
+            self.assertEqual(res.status, AutopilotStatus.COMPLETED)
+
+    def test_autopilot_routes_bluetooth_repair_through_orchestrator(self):
+        """restart_bluetooth_service in Autopilot must route through BluetoothRepairsOrchestrator."""
+        with patch.object(self.autopilot.bluetooth_orchestrator, "execute_confirmed_repair") as mock_exec:
+            mock_res = MagicMock()
+            mock_res.confirmed = True
+            mock_res.repair_success = True
+            mock_res.verification_status = "verified"
+            mock_res.repair_output = {"success": True}
+            mock_res.after_state = {"status": "RUNNING"}
+            mock_res.explanation = "Bluetooth restarted."
+            mock_exec.return_value = mock_res
+
+            raw_plan = {
+                "goal": "Restart bluetooth",
+                "steps": [{"sequence": 1, "tool_name": "restart_bluetooth_service", "arguments": {}}],
+            }
+            plan = self.autopilot.validate_and_build_plan(raw_plan, session_id="sess_bt_route")
+            self.autopilot.authorize_plan(plan, user_confirmed_hash=plan.plan_hash)
+            res = self.autopilot.execute_plan(plan, user_confirmed_hash=plan.plan_hash)
+
+            self.assertTrue(mock_exec.called, "BluetoothRepairsOrchestrator was not called!")
+            call_kwargs = mock_exec.call_args[1]
+            self.assertIsNotNone(call_kwargs.get("confirmation_token"))
+            self.assertEqual(res.status, AutopilotStatus.COMPLETED)
+
+    def test_autopilot_routes_performance_repair_through_orchestrator(self):
+        """terminate_user_process in Autopilot must route through PerformanceRepairsOrchestrator."""
+        with patch.object(self.autopilot.performance_orchestrator, "execute_repair_with_verification") as mock_exec:
+            mock_res = MagicMock()
+            mock_res.confirmed = True
+            mock_res.repair_success = True
+            mock_res.verification_status = "verified"
+            mock_res.repair_output = {"terminated": True}
+            mock_res.after_state = {"running": False}
+            mock_res.explanation = "Process terminated."
+            mock_exec.return_value = mock_res
+
+            raw_plan = {
+                "goal": "Terminate process",
+                "steps": [{"sequence": 1, "tool_name": "terminate_user_process", "arguments": {"pid": 9999}}],
+            }
+            plan = self.autopilot.validate_and_build_plan(raw_plan, session_id="sess_perf_route")
+            self.autopilot.authorize_plan(plan, user_confirmed_hash=plan.plan_hash)
+            res = self.autopilot.execute_plan(plan, user_confirmed_hash=plan.plan_hash)
+
+            self.assertTrue(mock_exec.called, "PerformanceRepairsOrchestrator was not called!")
+            call_kwargs = mock_exec.call_args[1]
+            self.assertIsNotNone(call_kwargs.get("confirmation_token"))
+            self.assertEqual(res.status, AutopilotStatus.COMPLETED)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -85,6 +85,9 @@ def initialize_app_directories(paths: AppPaths) -> Dict[str, bool]:
 
     for name, directory in dirs_to_create:
         try:
+            if name != "root" and not is_safe_app_path(directory, paths.root_dir):
+                results[name] = False
+                continue
             directory.mkdir(parents=True, exist_ok=True)
             # Verify write permissions using a temporary probe file
             probe = directory / ".write_probe"
@@ -98,10 +101,54 @@ def initialize_app_directories(paths: AppPaths) -> Dict[str, bool]:
 
 
 def is_safe_app_path(target_path: Path, allowed_root: Path) -> bool:
-    """Verify target path does not escape allowed directory via path traversal or symlinks."""
+    """
+    Verify target path does not escape allowed directory via path traversal,
+    sibling directory collisions, symlinks, or cross-drive references.
+
+    Uses path-component containment rather than string prefix matching.
+    Fails closed on resolution errors, invalid paths, or unsupported forms.
+    """
+    if target_path is None or allowed_root is None:
+        return False
     try:
-        resolved_target = target_path.resolve()
-        resolved_root = allowed_root.resolve()
-        return str(resolved_target).startswith(str(resolved_root))
+        target = Path(target_path)
+        root = Path(allowed_root)
+
+        str_target = str(target).strip()
+        str_root = str(root).strip()
+        if not str_target or not str_root:
+            return False
+
+        # Reject UNC / network paths if root is not on the same UNC network location
+        target_is_unc = str_target.startswith(r"\\") or str_target.startswith("//")
+        root_is_unc = str_root.startswith(r"\\") or str_root.startswith("//")
+        if target_is_unc != root_is_unc:
+            return False
+
+        # Resolve both paths to normalize traversal sequences, symlinks, and relative segments
+        resolved_target = target.resolve()
+        resolved_root = root.resolve()
+
+        # Enforce drive equality on Windows
+        if resolved_target.drive or resolved_root.drive:
+            if not resolved_target.drive or not resolved_root.drive:
+                return False
+            if resolved_target.drive.lower() != resolved_root.drive.lower():
+                return False
+
+        # Primary check: Path.is_relative_to enforces strict component hierarchy
+        # (rejects sibling paths like C:\root_extra against C:\root)
+        if resolved_target.is_relative_to(resolved_root):
+            return True
+
+        # Secondary check: Case-normalization fallback on Windows/macOS where filesystem
+        # is case-preserving but case-insensitive, in case components have mismatched casing
+        if os.name == "nt":
+            target_parts = [p.lower() for p in resolved_target.parts]
+            root_parts = [p.lower() for p in resolved_root.parts]
+            if len(target_parts) >= len(root_parts) and target_parts[:len(root_parts)] == root_parts:
+                return True
+
+        return False
     except Exception:
         return False

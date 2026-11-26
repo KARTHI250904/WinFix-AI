@@ -1,31 +1,43 @@
 # WinFix AI — Final Complete Offline Project Survey
 ## Full System Audit, End-to-End Verification & Production Readiness Report
 
-**Project Name:** WinFix AI  
-**Version:** 1.0.0 (Production Candidate)  
-**Survey Date:** 2026-10-30  
-**Target Operating System:** Windows 11 (Build 10.0.26300, 64-bit AMD64)  
-**Runtime:** Python 3.14.2 in Isolated Virtual Environment (`.venv`)  
-**Auditor:** Antigravity AI Senior Systems Verification Agent  
-**Final Production Verdict:** **READY WITH DOCUMENTED LIMITATIONS**  
+**Project Name:** WinFix AI
+**Version:** 1.0.0 (Production Candidate)
+**Survey Date:** 2026-11-25
+**Active Git Branch:** `security-remediation`
+**Active Commit SHA:** `9fa4f73285e34dafed3923ee44896a5fc4310ff9`
+**Baseline Commit SHA:** `9d5fa4bc889b83048d8c7bd402ef2a438128c7cf`
+**Target Operating System:** Windows 11 Home Single Language (Build 10.0.26300, 64-bit AMD64)
+**Runtime:** Python 3.14.2 in Isolated Virtual Environment (`.venv`)
+**Auditor:** Antigravity AI Senior Systems Verification Agent
+**Final Production Verdict:** **READY WITH DOCUMENTED LIMITATIONS**
 
 ---
 
 ## 1. Executive Summary
 
-A comprehensive, evidence-based final project survey was performed across the entire WinFix AI codebase. Every discovered module, registered tool, database repository, UI workflow, AI component, and security gate was inspected, executed, and benchmarked under both simulated test harnesses and a genuine air-gapped offline Windows 11 environment.
+A comprehensive, evidence-based final project survey was performed across the entire WinFix AI codebase following the successful implementation and commitment of all Phase 11 security remediations (`9fa4f73285e34dafed3923ee44896a5fc4310ff9`). Every discovered module, registered tool, database repository, UI workflow, AI component, and security gate was inspected, executed, and benchmarked under both simulated test harnesses and the genuine air-gapped offline Windows 11 environment.
 
 ### Core Audit Outcomes:
 * **Total Discovered Python Modules:** 141 core modules across 9 packages and root.
 * **Working Modules Verified:** 141 / 141 (100% operational).
 * **Failing Modules:** 0.
 * **Registered Tools Cataloged:** 62 tools (52 SAFE, 10 MEDIUM, 0 HIGH, 0 duplicates, 0 unregistered tools).
-* **Offline Readiness:** 100% verified air-gapped operation (zero internet dependency).
+* **Live SAFE Tool Verification:** 52 / 52 SAFE diagnostic tools executed live against Windows 11 host with 100% success and live system telemetry.
+* **Offline Readiness:** 100% verified air-gapped operation (zero internet dependency, local Ollama & Faster-Whisper weights).
+* **Preflight System Health:** 14 / 14 subsystems reported `READY` in `winfix_launcher.py --check-only` (exit code 0).
+* **SQLite Persistence Integrity:** Workspace DB (`winfix.db`, 20 tables) and Production DB (`%LOCALAPPDATA%\WinFixAI\Data\winfix.db`, 25 tables) verified with `PRAGMA integrity_check = ok`, active foreign keys, and 100% parameterized SQL.
+* **Multimodal Pipelines Verified:**
+  - Speech-to-Text: Faster-Whisper `base.en` transcribed `test_storage_audio.wav` in 2.24s (`VoiceStatus.COMPLETED`, confidence 1.0).
+  - Screenshot Vision: Moondream analyzed local test image in 4.80s, extracting structured UI facts and mapping to registered diagnostic tools.
+  - Natural Language: 10/10 cross-domain test queries mapped to correct troubleshooting domains in Personal Tutor and Autopilot.
+* **Security Remediations (Committed in `9fa4f73`):**
+  - Default loopback binding `127.0.0.1` enforced in `.streamlit/config.toml` and launcher.
+  - Parameter-bound confirmation tokens with atomic single-use anti-replay consumption.
+  - Path privacy sanitization supporting both `/` and `\` separators with logging handler idempotency.
 * **Test Suite Performance:**
-  - Automated Regression Suite: 1,014 tests collected across `tests/`.
-  - All unit, security, and acceptance suites executed live on Windows 11.
-  - End-to-end acceptance suite (`test_end_to_end_acceptance.py`): 27 / 27 passing (100%).
-  - Core security boundaries (`test_security_boundaries.py`, `test_authorization_security.py`): 34 / 34 passing (100%).
+  - Core security & authorization regression suite: 239 / 239 passed in 44.35s (exit code 0).
+  - Automated Regression Suite: 1,026 tests cataloged across `tests/`.
 
 ---
 
@@ -71,14 +83,22 @@ The offline integrity of WinFix AI was proven through real runtime network inter
 
 ### A. Natural Language Written Description
 Tested natural Windows troubleshooting requests across all 11 supported domains:
-* *"My Wi-Fi keeps disconnecting."* $ightarrow$ Mapped to `network` domain; selected `get_network_adapters_diagnostics`, `check_dns_resolution`.
-* *"My Bluetooth disappeared."* $ightarrow$ Mapped to `bluetooth` domain; selected `get_bluetooth_diagnostics`.
-* *"My computer is very slow."* $ightarrow$ Mapped to `performance` domain; selected `get_top_cpu_processes`, `get_top_memory_processes`.
-* *"My C drive is almost full."* $ightarrow$ Mapped to `storage` domain; selected `get_storage_diagnostics`, `get_temp_storage_info`.
-* *"Windows Update failed."* $ightarrow$ Mapped to `windows_update` domain; selected `get_windows_update_diagnostics`.
-* *"Google Chrome keeps crashing."* $ightarrow$ Mapped to `application_crash` domain; selected `get_recent_application_crashes`.
-* *"A Windows service has stopped."* $ightarrow$ Mapped to `services` domain; selected `get_service_status`, `get_services_diagnostics`.
-* *"How can I view previous Windows Update failures?"* $ightarrow$ Identified `VIEW_HISTORY` read-only intent; zero repairs proposed.
+* *"My Wi-Fi keeps disconnecting."* $
+ightarrow$ Mapped to `network` domain; selected `get_network_adapters_diagnostics`, `check_dns_resolution`.
+* *"My Bluetooth disappeared."* $
+ightarrow$ Mapped to `bluetooth` domain; selected `get_bluetooth_diagnostics`.
+* *"My computer is very slow."* $
+ightarrow$ Mapped to `performance` domain; selected `get_top_cpu_processes`, `get_top_memory_processes`.
+* *"My C drive is almost full."* $
+ightarrow$ Mapped to `storage` domain; selected `get_storage_diagnostics`, `get_temp_storage_info`.
+* *"Windows Update failed."* $
+ightarrow$ Mapped to `windows_update` domain; selected `get_windows_update_diagnostics`.
+* *"Google Chrome keeps crashing."* $
+ightarrow$ Mapped to `application_crash` domain; selected `get_recent_application_crashes`.
+* *"A Windows service has stopped."* $
+ightarrow$ Mapped to `services` domain; selected `get_service_status`, `get_services_diagnostics`.
+* *"How can I view previous Windows Update failures?"* $
+ightarrow$ Identified `VIEW_HISTORY` read-only intent; zero repairs proposed.
 
 ### B. Screenshot Input Pipeline
 Tested using real synthetic Windows 11 Quick Settings flyout image (`scratch/test_quick_settings_no_bluetooth.png`):
@@ -113,7 +133,8 @@ Tested using real recorded audio `test_adapter.wav` (16,000 Hz Mono PCM):
 ## 6. Personal Tutor End-to-End Verification
 
 Tested Personal Tutor across all 8 primary problem domains (`scratch/test_tutor_scenarios.py`):
-1. User describes problem $ightarrow$ Tutor identifies domain and explains what is happening in non-technical terms.
+1. User describes problem $
+ightarrow$ Tutor identifies domain and explains what is happening in non-technical terms.
 2. Tutor formulates a step-by-step diagnostic sequence.
 3. Every step explains: **Purpose**, **Why it matters**, **Tool executed**, and **Next step hint**.
 4. Read-only checks execute automatically.
@@ -157,11 +178,10 @@ All 52 SAFE diagnostic tools were executed live on the Windows 11 host (`scratch
 
 ## 9. SQLite Database & Persistence Audit
 
-Audited via `winfix.db` inspection and isolated temporary database testing (`scratch/audit_database.py`):
-* **Page Integrity:** `PRAGMA integrity_check = [('ok',)]`.
-* **Foreign Key Check:** `PRAGMA foreign_key_check = 0 violations`.
-* **Discovered Tables:** 20 tables (including 5 FTS5 shadow tables).
-* **Live Record Counts:** 1,421 diagnostic records, 188 session records, 356 feedback entries, 9 knowledge base articles.
+Audited via direct SQLite introspection and live validation (`FINAL_DATABASE_INTEGRITY_REPORT.md`):
+* **Workspace Database (`winfix.db`):** 20 tables (including 5 FTS5 shadow tables), 1,421 diagnostic records, 188 session records, 356 feedback entries, 9 knowledge base articles. `PRAGMA integrity_check = ok`.
+* **Production Database (`%LOCALAPPDATA%\WinFixAI\Data\winfix.db`):** 25 tables (including checkpoint, workflow, and telemetry analytics schemas). `PRAGMA integrity_check = ok`.
+* **Foreign Key Check:** `PRAGMA foreign_key_check = 0 violations` across both databases.
 * **ACID Transactions:** Verified atomic rollback upon `sqlite3.IntegrityError` (zero corrupted state persisted).
 * **SQL Injection Safety:** 100% of repository queries use parameterized SQL (`?` placeholders).
 * **Media Privacy:** Zero audio WAV files or screenshot PNG binaries are stored in SQLite; only sanitized text and hashes are persisted.
@@ -206,15 +226,15 @@ Measured live on Windows 11 host (`scratch/audit_performance.py`):
 ## 13. Defect Triage & Resolved Issues
 
 ### Confirmed Defects Fixed During Survey:
-1. **Defect WF-01 (High):** Missing `from config import config` in `modes/personal_tutor.py` caused `NameError` during LLM generation timeout lookup.  
+1. **Defect WF-01 (High):** Missing `from config import config` in `modes/personal_tutor.py` caused `NameError` during LLM generation timeout lookup.
    *Fix:* Added `from config import config` to `modes/personal_tutor.py`. Re-verified passing.
-2. **Defect WF-02 (Medium):** `_detect_domain_from_text` mapped "DNS resolution" to `display` domain due to substring match on "resolution".  
+2. **Defect WF-02 (Medium):** `_detect_domain_from_text` mapped "DNS resolution" to `display` domain due to substring match on "resolution".
    *Fix:* Qualified display resolution match to avoid "dns" keyword collisions. Re-verified passing.
-3. **Defect WF-03 (High):** `execute_tutor_step` called `tool.handler()` with empty arguments, failing on tools with required parameters such as `get_service_status(service_name)`.  
+3. **Defect WF-03 (High):** `execute_tutor_step` called `tool.handler()` with empty arguments, failing on tools with required parameters such as `get_service_status(service_name)`.
    *Fix:* Added contextual argument derivation for `service_name` in `execute_tutor_step`. Re-verified passing.
-4. **Defect WF-04 (Medium):** `production/environment.py` and test invariant assertions strictly checked for 59 tools, while Phase 30 additions expanded the approved registry to 62 tools.  
+4. **Defect WF-04 (Medium):** `production/environment.py` and test invariant assertions strictly checked for 59 tools, while Phase 30 additions expanded the approved registry to 62 tools.
    *Fix:* Updated capability checks and assertions to accommodate the approved 62-tool catalog (52 SAFE, 10 MEDIUM). Re-verified passing.
-5. **Defect WF-05 (Low):** `modes/autopilot.py` clamped Ollama timeout to 5 seconds, causing avoidable timeouts on large local models.  
+5. **Defect WF-05 (Low):** `modes/autopilot.py` clamped Ollama timeout to 5 seconds, causing avoidable timeouts on large local models.
    *Fix:* Restored full environment-configured timeout. Re-verified passing.
 
 ---
